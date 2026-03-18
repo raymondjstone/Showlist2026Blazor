@@ -854,7 +854,7 @@ namespace Showlist2026.Services
                                 s.url = url;
                                 s.scheduletime = su.Schedule.Time.ToString();
                                 s.scheduledays = days;
-                                s.premiered = su.Premiered.ToString();
+                                s.premiered = su.Premiered?.ToString();
                                 s.imagemed = med;
                                 s.imageorig = orig;
 
