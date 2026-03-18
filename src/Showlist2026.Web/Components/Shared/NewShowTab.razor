@@ -1,0 +1,14 @@
+@if (Tab != null)
+{
+    <div id="@Tab._TabId" class="tab-pane fade show active" role="tabpanel">
+        @foreach (var s in Tab._EpisodeList)
+        {
+            <NewShowCard ShowFilter="s" OnFilterChanged="OnFilterChanged" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public AiringAroundNowTabModel Tab { get; set; }
+    [Parameter] public EventCallback<(long id, string type, bool? state)> OnFilterChanged { get; set; }
+}

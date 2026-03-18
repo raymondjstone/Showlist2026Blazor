@@ -1,0 +1,179 @@
+@page "/admin/nzbsites"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>NZB Sites</PageTitle>
+
+@if (tvSites == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <h4>NZB Sites</h4>
+        <br />
+        <div class="row fw-bold mb-2">
+            <div class="col-1">Active</div>
+            <div class="col-1">Order</div>
+            <div class="col-2">Name</div>
+            <div class="col-7">URL Template</div>
+            <div class="col-1"></div>
+        </div>
+
+        @foreach (var site in tvSites)
+        {
+            <div class="row mb-2">
+                <div class="col-1">
+                    <input type="checkbox" class="form-check-input"
+                           checked="@GetSiteEditState(site.Id).Active"
+                           @onchange="(e) => UpdateSiteActive(site.Id, (bool)e.Value)" />
+                </div>
+                <div class="col-1">
+                    <input type="text" class="form-control form-control-sm"
+                           value="@GetSiteEditState(site.Id).Order"
+                           @onchange="(e) => UpdateSiteOrder(site.Id, e.Value.ToString())" />
+                </div>
+                <div class="col-2">
+                    <input type="text" class="form-control form-control-sm"
+                           value="@GetSiteEditState(site.Id).Name"
+                           @onchange="(e) => UpdateSiteName(site.Id, e.Value.ToString())" />
+                </div>
+                <div class="col-7">
+                    <input type="text" class="form-control form-control-sm"
+                           value="@GetSiteEditState(site.Id).URLTemplate"
+                           @onchange="(e) => UpdateSiteUrl(site.Id, e.Value.ToString())" />
+                </div>
+                <div class="col-1">
+                    <button class="btn btn-primary btn-sm" @onclick="() => SaveSite(site.Id)">Save</button>
+                    <button class="btn btn-danger btn-sm ms-1" @onclick="() => DeleteSite(site.Id)">Del</button>
+                </div>
+            </div>
+        }
+
+        <hr />
+        <h5>Add New Site</h5>
+        <div class="row mb-2">
+            <div class="col-1">
+                <input type="checkbox" class="form-check-input" @bind="newSite.Active" />
+            </div>
+            <div class="col-1">
+                <input type="text" class="form-control form-control-sm" @bind="newSite.Order" />
+            </div>
+            <div class="col-2">
+                <input type="text" class="form-control form-control-sm" @bind="newSite.Name" />
+            </div>
+            <div class="col-7">
+                <input type="text" class="form-control form-control-sm" @bind="newSite.URLTemplate" />
+            </div>
+            <div class="col-1">
+                <button class="btn btn-success btn-sm" @onclick="AddSite">Add</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="alert alert-info mt-2">@statusMessage</div>
+}
+
+@code {
+    private List<TVSite> tvSites;
+    private Dictionary<int, SiteEditState> editStates = new();
+    private SiteEditState newSite = new() { Order = "99", Name = "", URLTemplate = "", Active = true };
+    private string statusMessage;
+
+    private class SiteEditState
+    {
+        public bool Active { get; set; }
+        public string Order { get; set; }
+        public string Name { get; set; }
+        public string URLTemplate { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        tvSites = AppService.TvSites().OrderBy(a => a.Order).ToList();
+        editStates.Clear();
+        foreach (var site in tvSites)
+        {
+            editStates[site.Id] = new SiteEditState
+            {
+                Active = site.Active,
+                Order = site.Order.ToString(),
+                Name = site.Name,
+                URLTemplate = site.URLTemplate
+            };
+        }
+        if (tvSites.Any())
+        {
+            newSite.Order = (tvSites.Max(a => a.Order) + 1).ToString();
+        }
+    }
+
+    private SiteEditState GetSiteEditState(int id)
+    {
+        return editStates.ContainsKey(id) ? editStates[id] : new SiteEditState();
+    }
+
+    private void UpdateSiteActive(int id, bool value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].Active = value;
+    }
+
+    private void UpdateSiteOrder(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].Order = value;
+    }
+
+    private void UpdateSiteName(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].Name = value;
+    }
+
+    private void UpdateSiteUrl(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].URLTemplate = value;
+    }
+
+    private async Task SaveSite(int id)
+    {
+        var state = GetSiteEditState(id);
+        if (!string.IsNullOrEmpty(state.Name))
+        {
+            int.TryParse(state.Order, out int order);
+            await AppService.TVSiteUpdate(id, state.Active, order, state.Name, state.URLTemplate);
+            statusMessage = $"Saved: {state.Name}";
+            await LoadData();
+        }
+    }
+
+    private async Task DeleteSite(int id)
+    {
+        await AppService.TVSiteDelete(id);
+        statusMessage = "Deleted site";
+        await LoadData();
+    }
+
+    private async Task AddSite()
+    {
+        if (!string.IsNullOrEmpty(newSite.Name))
+        {
+            int.TryParse(newSite.Order, out int order);
+            await AppService.TVSiteUpdate(-1, newSite.Active, order, newSite.Name, newSite.URLTemplate);
+            statusMessage = $"Added: {newSite.Name}";
+            newSite = new SiteEditState { Order = "99", Name = "", URLTemplate = "", Active = true };
+            await LoadData();
+        }
+    }
+}

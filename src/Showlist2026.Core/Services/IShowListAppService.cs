@@ -1,0 +1,96 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+using Showlist2026.Entities;
+using Showlist2026.Models;
+using Showlist2026.NZBPlanetApiJSON;
+using Showlist2026.TVMaze;
+
+namespace Showlist2026.Services
+{
+    public interface IShowListAppService
+    {
+        HomePageStats HomePageStats();
+        List<EpFilter> AiringAroundNowForUser(int daysminus = -15, int daysplus = 15, bool firstshowOnly = false);
+        List<EpFilter> UndecidedShows();
+        List<EpFilter> NextUnwatchedPerShow();
+        List<ShowFilter> ComingSoonForUser(int daysminus = 1, int daysplus = 180);
+        List<Show> NoFolderList();
+        Show ShowPageData(long id);
+        List<TVSite> TvSites();
+        List<UserShowSelection> ShowData();
+        List<Country> CountryData();
+        List<Language> LanguageData();
+        List<Showlist2026.Entities.Type> TypeData();
+        List<Network> NetworkData();
+        List<WebNetwork> WebNetworkData();
+        List<GenreText> GenreData();
+        List<Show> showlist(string s);
+        Task<bool> ShowFilter(long id, bool? statewanted);
+        Task<bool> LanguageFilter(long id, bool? statewanted);
+        Task<bool> CountryFilter(long id, bool? statewanted);
+        Task<bool> NetworkFilter(long id, bool? statewanted);
+        Task<bool> WebNetworkFilter(long id, bool? statewanted);
+        Task<bool> TypeFilter(long id, bool? statewanted);
+        Task<bool> GenreFilter(long id, bool? statewanted);
+        Task<bool> WatchedFilter(long id, bool statewanted);
+        Task<bool> SeasonWatchedFilter(long id, long season, bool statewanted);
+        Task<bool> SetFolderName(long id, string foldername);
+        Task<List<FileInfo>> Dirlist(string dirName, int daysOldToAllow, string filter = "*.*", int minSizeAllowed = 50000);
+        Task<List<TouchFile>> ShowDownloaded(int year = 0);
+        Task<NzBplanetJSON> NZBPlanetSearch(Show show);
+        Task TVSiteUpdate(int id, bool active, int order, string name, string urltemplate);
+        Task TVSiteDelete(int id);
+        List<TVDirectories> TvDirectories();
+        Task TVDirectoryUpdate(int id, string name, int daysToScan, string filter, int minFileSize);
+        Task TVDirectoryDelete(int id);
+        Task CheckNewSeasonNotifications();
+
+        // Feature 2: Statistics
+        StatisticsModel GetStatistics();
+
+        // Feature 3: Search improvements
+        Task<List<TVMazeSearchResult>> SearchTvMaze(string query);
+        List<Show> AdvancedSearch(string? name, int? genreId, int? networkId, int? year);
+
+        // Feature 4: Bulk actions
+        Task BulkSetShowFilter(List<long> showIds, bool? state);
+        Task CatchUpShow(long showId);
+
+        // Feature 6: Download progress
+        List<DownloadProgressModel> GetDownloadProgress();
+
+        // Feature 10: Export/Import
+        string ExportUserDataAsJson();
+        Task<int> ImportUserDataFromJson(string json);
+
+        // Show notes and priority
+        Task SetShowNotes(long showId, string notes);
+        Task SetShowPriority(long showId, int priority);
+
+        // Watch history
+        List<WatchedHistory> GetWatchedHistory(int days = 30);
+
+        // Episode counts for show cards
+        Dictionary<int, (int watched, int total)> GetEpisodeCountsForShows(List<int> showIds);
+
+        // Tonight's episodes
+        List<EpFilter> TonightsEpisodes();
+
+        // Similar shows
+        List<Show> GetSimilarShows(long showId, int max = 5);
+
+        // Duplicate detection
+        List<Show> FindDuplicateShows();
+
+        // Trending
+        Task<List<TrendingShowModel>> GetTrendingShows();
+
+        // Show comparison
+        ShowComparisonModel CompareShows(long showId1, long showId2);
+
+        // CSV export
+        string ExportUserDataAsCsv();
+    }
+}

@@ -1,0 +1,75 @@
+@page "/download-progress"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Download Progress</PageTitle>
+
+@if (progress == null)
+{
+    <div class="text-center mt-5"><div class="spinner-border" role="status"></div></div>
+}
+else
+{
+    <div class="container-fluid mt-3">
+        <h4>Download Progress (@progress.Count shows)</h4>
+
+        @if (progress.Any(p => p.MissingCount > 0))
+        {
+            <div class="alert alert-info">
+                @progress.Count(p => p.MissingCount > 0) shows with missing episodes
+                (@progress.Sum(p => p.MissingCount) total missing)
+            </div>
+        }
+
+        <div class="row g-3">
+            @foreach (var show in progress)
+            {
+                var barClass = show.PercentComplete == 100 ? "bg-success" : show.PercentComplete > 50 ? "bg-info" : "bg-warning";
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body p-2">
+                            <div class="d-flex justify-content-between mb-1">
+                                <a href="/showlist/show/@show.ShowId" class="text-decoration-none fw-bold small">@show.ShowName</a>
+                                <span class="small text-muted">@show.DownloadedEpisodes / @show.TotalAiredEpisodes</span>
+                            </div>
+                            <div class="progress" style="height: 16px;">
+                                <div class="progress-bar @barClass" style="width: @show.PercentComplete%">
+                                    @show.PercentComplete%
+                                </div>
+                            </div>
+                            @if (show.MissingCount > 0 && expandedShowId == show.ShowId)
+                            {
+                                <div class="mt-2 small">
+                                    <strong>Missing:</strong>
+                                    @string.Join(", ", show.MissingEpisodes.Select(e => e.EpNumberFormatted))
+                                </div>
+                            }
+                            @if (show.MissingCount > 0)
+                            {
+                                <button class="btn btn-link btn-sm p-0 mt-1"
+                                        @onclick="() => ToggleExpand(show.ShowId)">
+                                    @(expandedShowId == show.ShowId ? "Hide" : "Show") @show.MissingCount missing
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<DownloadProgressModel>? progress;
+    private int? expandedShowId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        progress = AppService.GetDownloadProgress();
+    }
+
+    private void ToggleExpand(int showId)
+    {
+        expandedShowId = expandedShowId == showId ? null : showId;
+    }
+}

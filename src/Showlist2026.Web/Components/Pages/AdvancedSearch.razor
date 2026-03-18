@@ -1,0 +1,203 @@
+@page "/search"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Advanced Search</PageTitle>
+
+<div class="container-fluid mt-3">
+    <h4>Advanced Search</h4>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Show Name</label>
+                    <input type="text" class="form-control" @bind="searchName" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Genre</label>
+                    <select class="form-select" @bind="searchGenreId">
+                        <option value="">All</option>
+                        @if (genres != null)
+                        {
+                            @foreach (var g in genres)
+                            {
+                                <option value="@g.Id">@g.genre</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Network</label>
+                    <select class="form-select" @bind="searchNetworkId">
+                        <option value="">All</option>
+                        @if (networks != null)
+                        {
+                            @foreach (var n in networks.Where(n => !string.IsNullOrEmpty(n.name)))
+                            {
+                                <option value="@n.Id">@n.name</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Year</label>
+                    <input type="number" class="form-control" @bind="searchYear" placeholder="e.g. 2025" />
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" @onclick="SearchLocal">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">Search TVMaze Directly</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <input type="text" class="form-control" @bind="tvMazeQuery" placeholder="Search TVMaze..." />
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-secondary w-100" @onclick="SearchTvMaze" disabled="@searching">
+                        @if (searching) { <span class="spinner-border spinner-border-sm"></span> }
+                        <i class="fas fa-globe"></i> Search TVMaze
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (localResults != null)
+    {
+        <h5>Local Results (@localResults.Count)</h5>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Network</th>
+                        <th>Premiered</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var show in localResults)
+                    {
+                        <tr>
+                            <td><a href="/showlist/show/@show.Id">@show.name</a></td>
+                            <td>@show.Types?.type</td>
+                            <td>@show.status</td>
+                            <td>@(show.Networks?.name ?? show.WebNetworks?.name)</td>
+                            <td>@show.premiered</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (tvMazeResults != null)
+    {
+        <h5>TVMaze Results (@tvMazeResults.Count)</h5>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Language</th>
+                        <th>Status</th>
+                        <th>Premiered</th>
+                        <th>In DB?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var result in tvMazeResults)
+                    {
+                        var inDb = localShowIds.Contains(result.Show.Id);
+                        <tr>
+                            <td>
+                                @if (result.Show.Image?.Medium != null)
+                                {
+                                    <img src="@result.Show.Image.Medium" style="height:40px;" />
+                                }
+                            </td>
+                            <td>
+                                @if (inDb)
+                                {
+                                    <a href="/showlist/show/@localShowIdMap[result.Show.Id]">@result.Show.Name</a>
+                                }
+                                else
+                                {
+                                    @result.Show.Name
+                                }
+                            </td>
+                            <td>@result.Show.Type</td>
+                            <td>@result.Show.Language</td>
+                            <td>@result.Show.Status</td>
+                            <td>@result.Show.Premiered</td>
+                            <td>
+                                @if (inDb)
+                                {
+                                    <span class="badge bg-success">Yes</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">No</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private string? searchName;
+    private string? searchGenreId;
+    private string? searchNetworkId;
+    private int? searchYear;
+    private string? tvMazeQuery;
+    private bool searching;
+
+    private List<Show>? localResults;
+    private List<TVMaze.TVMazeSearchResult>? tvMazeResults;
+    private HashSet<long> localShowIds = new();
+    private Dictionary<long, int> localShowIdMap = new();
+
+    private List<GenreText>? genres;
+    private List<Network>? networks;
+
+    protected override void OnInitialized()
+    {
+        genres = AppService.GenreData();
+        networks = AppService.NetworkData();
+
+        var shows = AppService.showlist("");
+        localShowIdMap = shows.GroupBy(s => s.showid).ToDictionary(g => g.Key, g => g.First().Id);
+        localShowIds = shows.Select(s => s.showid).ToHashSet();
+    }
+
+    private void SearchLocal()
+    {
+        int? genreId = string.IsNullOrEmpty(searchGenreId) ? null : int.Parse(searchGenreId);
+        int? networkId = string.IsNullOrEmpty(searchNetworkId) ? null : int.Parse(searchNetworkId);
+
+        localResults = AppService.AdvancedSearch(searchName, genreId, networkId, searchYear);
+    }
+
+    private async Task SearchTvMaze()
+    {
+        if (string.IsNullOrWhiteSpace(tvMazeQuery)) return;
+        searching = true;
+        tvMazeResults = await AppService.SearchTvMaze(tvMazeQuery);
+        searching = false;
+    }
+}

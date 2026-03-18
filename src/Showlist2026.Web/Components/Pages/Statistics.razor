@@ -1,0 +1,122 @@
+@page "/stats"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Statistics</PageTitle>
+
+@if (stats == null)
+{
+    <div class="text-center mt-5"><div class="spinner-border" role="status"></div></div>
+}
+else
+{
+    <div class="container-fluid mt-3">
+        <h4>Statistics</h4>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card text-bg-primary">
+                    <div class="card-body">
+                        <h6 class="card-title">Shows Tracked</h6>
+                        <p class="display-6">@stats.TotalShowsTracked</p>
+                        <small>@stats.ActiveShows active / @stats.CompletedShows ended</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-bg-success">
+                    <div class="card-body">
+                        <h6 class="card-title">Episodes Watched</h6>
+                        <p class="display-6">@stats.TotalEpisodesWatched</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-bg-info">
+                    <div class="card-body">
+                        <h6 class="card-title">Watch Time</h6>
+                        <p class="display-6">@((stats.TotalWatchTimeMinutes / 60).ToString("N0"))h</p>
+                        <small>@((stats.TotalWatchTimeMinutes / 1440).ToString("N0")) days</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (stats.MostWatchedShows.Any())
+        {
+            <div class="card mb-4">
+                <div class="card-header">Most Watched Shows</div>
+                <div class="card-body">
+                    @foreach (var show in stats.MostWatchedShows)
+                    {
+                        var pct = show.TotalEpisodes > 0 ? (show.EpisodesWatched * 100 / show.TotalEpisodes) : 0;
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small">
+                                <a href="/showlist/show/@show.ShowId">@show.ShowName</a>
+                                <span>@show.EpisodesWatched / @show.TotalEpisodes</span>
+                            </div>
+                            <div class="progress" style="height: 12px;">
+                                <div class="progress-bar bg-success" style="width: @pct%"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (stats.GenreBreakdown.Any())
+        {
+            <div class="card mb-4">
+                <div class="card-header">Genre Breakdown (by shows watched)</div>
+                <div class="card-body">
+                    @{ var maxGenre = stats.GenreBreakdown.Values.Max(); }
+                    @foreach (var genre in stats.GenreBreakdown.OrderByDescending(g => g.Value))
+                    {
+                        var pct = maxGenre > 0 ? (genre.Value * 100 / maxGenre) : 0;
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small">
+                                <span>@genre.Key</span>
+                                <span>@genre.Value shows</span>
+                            </div>
+                            <div class="progress" style="height: 10px;">
+                                <div class="progress-bar bg-info" style="width: @pct%"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (stats.EpisodesWatchedPerMonth.Any())
+        {
+            <div class="card mb-4">
+                <div class="card-header">Episodes Watched Per Month</div>
+                <div class="card-body">
+                    @{ var maxMonth = stats.EpisodesWatchedPerMonth.Values.Max(); }
+                    @foreach (var month in stats.EpisodesWatchedPerMonth.OrderBy(m => m.Key))
+                    {
+                        var pct = maxMonth > 0 ? (month.Value * 100 / maxMonth) : 0;
+                        <div class="mb-1">
+                            <div class="d-flex justify-content-between small">
+                                <span>@month.Key</span>
+                                <span>@month.Value episodes</span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-primary" style="width: @pct%"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private StatisticsModel? stats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        stats = AppService.GetStatistics();
+    }
+}

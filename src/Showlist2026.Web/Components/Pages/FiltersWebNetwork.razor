@@ -1,0 +1,108 @@
+@page "/filters/webnetworks"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Web Network Filters</PageTitle>
+
+@if (webnetworks == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <h4>Web Network Filters</h4>
+        <br />
+        @foreach (var i in webnetworks)
+        {
+            <div class="row mb-1">
+                <div class="col-4">
+                    @i.name
+                    @if (string.IsNullOrEmpty(i.name))
+                    {
+                        <text>{No name specified}</text>
+                    }
+                    @if (i.country != null)
+                    {
+                        @(" (" + i.country.name + ")")
+                    }
+                </div>
+                @if (i.UserWebNetworkSelections == null || i.UserWebNetworkSelections.Count == 0)
+                {
+                    <div class="col-3">
+                        <button class="btn btn-outline-secondary btn-sm" title="Always include show if the web network is @i.name"
+                                @onclick="() => SetFilter(i.Id, true)">
+                            Always Include
+                        </button>
+                    </div>
+                    <div class="col-3">
+                        <button class="btn btn-outline-secondary btn-sm" title="Always exclude show if the web network is @i.name"
+                                @onclick="() => SetFilter(i.Id, false)">
+                            Always Exclude
+                        </button>
+                    </div>
+                }
+                else if (i.UserWebNetworkSelections.First().include)
+                {
+                    <div class="col-3">
+                        <button class="btn btn-success btn-sm" title="Click to remove the always included filter"
+                                @onclick="() => DeleteFilter(i.Id)">
+                            Always included
+                        </button>
+                    </div>
+                    <div class="col-3">
+                        <button class="btn btn-outline-secondary btn-sm" title="Always exclude show if the web network is @i.name"
+                                @onclick="() => SetFilter(i.Id, false)">
+                            Always Exclude
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-3">
+                        <button class="btn btn-outline-secondary btn-sm" title="Always include show if the web network is @i.name"
+                                @onclick="() => SetFilter(i.Id, true)">
+                            Always Include
+                        </button>
+                    </div>
+                    <div class="col-3">
+                        <button class="btn btn-danger btn-sm" title="Click to remove the always excluded filter"
+                                @onclick="() => DeleteFilter(i.Id)">
+                            Always Excluded
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<WebNetwork> webnetworks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        webnetworks = AppService.WebNetworkData().OrderBy(a => a.name).ToList();
+    }
+
+    private async Task SetFilter(int id, bool stateWanted)
+    {
+        await AppService.WebNetworkFilter(id, stateWanted);
+        await LoadData();
+    }
+
+    private async Task DeleteFilter(int id)
+    {
+        await AppService.WebNetworkFilter(id, null);
+        await LoadData();
+    }
+}

@@ -1,0 +1,125 @@
+@if (Episode?.ep != null)
+{
+    <div class="row">
+        <div class="col-1">
+            @if (Episode.ep.AirDateOffset2 != null)
+            {
+                <i title="@(((DateTimeOffset)Episode.ep.AiringTime).LocalDateTime.ToString("HH:mm"))">
+                    @(((DateTimeOffset)Episode.ep.AiringTime).LocalDateTime.Date.ToString("dd MMM yyyy"))
+                </i>
+            }
+        </div>
+        <div class="col-2">
+            <FilterButtons Model="@Episode.showFilter" OnFilterChanged="OnFilterChanged" />
+            <a href="/showlist/show/@Episode.ep.show.Id" target="_blank"
+               title="@Episode.ep.show.summarycleanwithimage">
+                @Episode.ep.show.name
+            </a>
+            @if (Episode.privuser)
+            {
+                <i role="button" class="far fa-clipboard" title="Suggested regexp for show name"></i>
+            }
+            @if (string.IsNullOrEmpty(Episode.ep.show.FolderName))
+            {
+                <a href="/showlist/show/@(Episode.ep.show.Id)?setfoldername=true" target="_blank" title="Create Folder name">
+                    <i class="fa-solid fa-folder-plus"></i>
+                </a>
+            }
+            @if (Episode.TvSites != null)
+            {
+                foreach (var z in Episode.TvSites.Where(a => a.Active))
+                {
+                    var url = z.URLTemplate
+                        .Replace("{URLSearchTerm}", Episode.ep.show.URLSearchTerm)
+                        .Replace("{URLSearchTermNameOnly}", Episode.ep.show.URLSearchTermNameOnly)
+                        .Replace("{URLSearchTermGeekSeek}", Episode.ep.show.URLSearchTermGeekSeek);
+                    <a href="@url" target="_blank"><i class="fa-solid fa-magnifying-glass"></i></a>
+                }
+            }
+        </div>
+        <div class="col-2">
+            <i class="far fa-eye" title="Marked as watched" role="button"
+               @onclick="() => OnWatchedChanged.InvokeAsync((Episode.ep.Id, true))">
+            </i>
+            @(Episode.ep.EpNumberFormatted)
+            <a href="#" title="@Episode.ep.summarycleanwithimage">@Episode.ep.name</a>
+        </div>
+        <div class="col-1">
+            @if (Episode.ep.show.Languages != null)
+            {
+                <FilterButtons Model="@Episode.languageFilter" OnFilterChanged="OnFilterChanged" />
+                @Episode.ep.show.Languages.name
+            }
+        </div>
+        <div class="col-2">
+            @if (Episode.ep.show.Networks != null && !string.IsNullOrEmpty(Episode.ep.show.Networks.name))
+            {
+                <FilterButtons Model="@Episode.networkFilter" OnFilterChanged="OnFilterChanged" />
+                @Episode.ep.show.Networks.name
+                @if (Episode.ep.show.Networks.country != null && Episode.ep.show.Networks.country.code != "??")
+                {
+                    <text> (</text>
+                    <FilterButtons Model="@Episode.countryFilter(Episode.ep.show.Networks.country.Id, null)" OnFilterChanged="OnFilterChanged" />
+                    @(Episode.ep.show.Networks.country.code + ")")
+                }
+            }
+            @if (Episode.ep.show.WebNetworks != null && !string.IsNullOrEmpty(Episode.ep.show.WebNetworks.name))
+            {
+                @if (Episode.ep.show.Networks != null && !string.IsNullOrEmpty(Episode.ep.show.Networks.name))
+                {
+                    <br />
+                }
+                <FilterButtons Model="@Episode.webnetworkFilter" OnFilterChanged="OnFilterChanged" />
+                @Episode.ep.show.WebNetworks.name
+                @if (Episode.ep.show.WebNetworks.country != null && Episode.ep.show.WebNetworks.country.code != "??")
+                {
+                    <text> (</text>
+                    <FilterButtons Model="@Episode.countryFilter(Episode.ep.show.WebNetworks.country.Id, null)" OnFilterChanged="OnFilterChanged" />
+                    @(Episode.ep.show.WebNetworks.country.code + ")")
+                }
+            }
+        </div>
+        <div class="col-2">
+            @if (Episode.ep.show.Genres != null)
+            {
+                var first = true;
+                foreach (var g in Episode.ep.show.Genres)
+                {
+                    if (!first)
+                    {
+                        <br />
+                    }
+                    <FilterButtons Model="@Episode.genreFilter(g.genretext.Id, null)" OnFilterChanged="OnFilterChanged" />
+                    @g.genretext.genre
+                    first = false;
+                }
+            }
+        </div>
+        <div class="col-1">
+            @{
+                var statusClass = Episode.ep.show.status?.ToLower() switch
+                {
+                    "running" => "bg-success",
+                    "ended" => "bg-secondary",
+                    "to be determined" => "bg-warning text-dark",
+                    "in development" => "bg-info",
+                    _ => "bg-light text-dark"
+                };
+            }
+            <span class="badge @statusClass">@Episode.ep.show.status</span>
+        </div>
+        <div class="col-1">
+            @if (Episode.ep.show.Types != null)
+            {
+                <FilterButtons Model="@Episode.typeFilter" OnFilterChanged="OnFilterChanged" />
+                @Episode.ep.show.Types.type
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public EpFilter Episode { get; set; }
+    [Parameter] public EventCallback<(long id, string type, bool? state)> OnFilterChanged { get; set; }
+    [Parameter] public EventCallback<(long id, bool state)> OnWatchedChanged { get; set; }
+}

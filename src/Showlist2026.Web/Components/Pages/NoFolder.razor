@@ -1,0 +1,85 @@
+@page "/no-folder"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Shows Without Folders</PageTitle>
+
+@if (noFolderList == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <h4>Shows Without Folder Names (@noFolderList.Count)</h4>
+        @foreach (var s in noFolderList)
+        {
+            <div class="row">
+                <div class="col-3">
+                    <a href="/showlist/show/@s.Id" title="@s.nameclean">
+                        @s.nameclean
+                    </a>
+                </div>
+                <div class="col-3">
+                    <a href="/showlist/show/@s.Id" title="@s.nameclean">
+                        @(s.SuggestedFolderName ?? s.DefaultFolderName)
+                    </a>
+                </div>
+                <div class="col-2">
+                    @{
+                        var statusClass = s.status?.ToLower() switch
+                        {
+                            "running" => "bg-success",
+                            "ended" => "bg-secondary",
+                            "to be determined" => "bg-warning text-dark",
+                            "in development" => "bg-info",
+                            _ => "bg-light text-dark"
+                        };
+                    }
+                    <span class="badge @statusClass">@s.status</span>
+                </div>
+                <div class="col-1">
+                    <button class="btn btn-sm btn-outline-primary" @onclick="() => ShowFolderModal(s)">
+                        <i class="fa fa-plus-square"></i> Set Folder
+                    </button>
+                </div>
+            </div>
+        }
+
+        @if (selectedShow != null)
+        {
+            <FolderNameModal Show="selectedShow" OnFolderNameChanged="HandleFolderNameChanged" OnCancel="() => selectedShow = null" />
+        }
+    </div>
+}
+
+@code {
+    private List<Show> noFolderList;
+    private Show selectedShow;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        noFolderList = AppService.NoFolderList().OrderByDescending(a => a.showid).ToList();
+    }
+
+    private void ShowFolderModal(Show show)
+    {
+        selectedShow = show;
+    }
+
+    private async Task HandleFolderNameChanged((long id, string name) args)
+    {
+        await AppService.SetFolderName(args.id, args.name);
+        selectedShow = null;
+        await LoadData();
+    }
+}

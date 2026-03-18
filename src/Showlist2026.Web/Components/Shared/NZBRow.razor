@@ -1,0 +1,28 @@
+@using Showlist2026.NZBPlanetApiJSON
+
+@if (Item != null)
+{
+    <div class="row">
+        <div class="col-1">
+            @Item.EpNumberFormatted
+        </div>
+        <div class="col-4">
+            <a href="@Item.Link" target="_blank" title="@Item.Title">
+                @Item.Title
+            </a>
+        </div>
+        <div class="col-2">
+            @Item.PubDate
+        </div>
+        <div class="col-2">
+            @(Item.SizeAsNumberMBs)MB
+        </div>
+        <div class="col-3">
+            @Item.Category
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Showlist2026.NZBPlanetApiJSON.Item Item { get; set; }
+}

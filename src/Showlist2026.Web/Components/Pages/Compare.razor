@@ -1,0 +1,146 @@
+@page "/compare"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Compare Shows</PageTitle>
+
+<div class="container-fluid">
+    <h4>Compare Shows</h4>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-5">
+            <label class="form-label">Show 1</label>
+            <input class="form-control" @bind="search1" @bind:event="oninput" placeholder="Search..." />
+            @if (!string.IsNullOrEmpty(search1) && searchResults1 != null && show1Id == 0)
+            {
+                <ul class="list-group mt-1">
+                    @foreach (var s in searchResults1.Take(5))
+                    {
+                        <li class="list-group-item list-group-item-action" role="button" @onclick="() => SelectShow1(s)">@s.name</li>
+                    }
+                </ul>
+            }
+            @if (show1Id > 0)
+            {
+                <span class="badge bg-primary mt-1">@search1</span>
+                <button class="btn btn-sm btn-link" @onclick="() => { show1Id = 0; search1 = string.Empty; comparison = null; }">clear</button>
+            }
+        </div>
+        <div class="col-md-2 d-flex align-items-end justify-content-center">
+            <button class="btn btn-primary" @onclick="DoCompare" disabled="@(show1Id == 0 || show2Id == 0)">
+                <i class="fas fa-exchange-alt"></i> Compare
+            </button>
+        </div>
+        <div class="col-md-5">
+            <label class="form-label">Show 2</label>
+            <input class="form-control" @bind="search2" @bind:event="oninput" placeholder="Search..." />
+            @if (!string.IsNullOrEmpty(search2) && searchResults2 != null && show2Id == 0)
+            {
+                <ul class="list-group mt-1">
+                    @foreach (var s in searchResults2.Take(5))
+                    {
+                        <li class="list-group-item list-group-item-action" role="button" @onclick="() => SelectShow2(s)">@s.name</li>
+                    }
+                </ul>
+            }
+            @if (show2Id > 0)
+            {
+                <span class="badge bg-primary mt-1">@search2</span>
+                <button class="btn btn-sm btn-link" @onclick="() => { show2Id = 0; search2 = string.Empty; comparison = null; }">clear</button>
+            }
+        </div>
+    </div>
+
+    @if (comparison != null)
+    {
+        <div class="row g-3">
+            @foreach (var side in new[] { comparison.Show1, comparison.Show2 })
+            {
+                <div class="col-md-6">
+                    @if (side.Show != null)
+                    {
+                        <div class="card">
+                            <div class="card-header fw-bold">
+                                <a href="/showlist/show/@side.Show.Id">@side.Show.name</a>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm mb-0">
+                                    <tr><td>Status</td><td>@side.Show.status</td></tr>
+                                    <tr><td>Network</td><td>@(side.Network ?? "-")</td></tr>
+                                    <tr><td>Genres</td><td>@(side.Genres)</td></tr>
+                                    <tr><td>Seasons</td><td>@side.Seasons</td></tr>
+                                    <tr><td>Total Episodes</td><td>@side.TotalEpisodes</td></tr>
+                                    <tr><td>Aired Episodes</td><td>@side.AiredEpisodes</td></tr>
+                                    <tr><td>Watched Episodes</td><td>@side.WatchedEpisodes</td></tr>
+                                    <tr>
+                                        <td>Progress</td>
+                                        <td>
+                                            @if (side.AiredEpisodes > 0)
+                                            {
+                                                var pct = (int)(100.0 * side.WatchedEpisodes / side.AiredEpisodes);
+                                                <div class="progress">
+                                                    <div class="progress-bar bg-success" style="width:@(pct)%">@pct%</div>
+                                                </div>
+                                            }
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string search1 = "";
+    private string search2 = "";
+    private long show1Id;
+    private long show2Id;
+    private List<Show> searchResults1;
+    private List<Show> searchResults2;
+    private ShowComparisonModel comparison;
+
+    private string _lastSearch1 = "";
+    private string _lastSearch2 = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (search1 != _lastSearch1 && show1Id == 0 && search1.Length >= 2)
+        {
+            _lastSearch1 = search1;
+            searchResults1 = AppService.showlist(search1);
+            StateHasChanged();
+        }
+        if (search2 != _lastSearch2 && show2Id == 0 && search2.Length >= 2)
+        {
+            _lastSearch2 = search2;
+            searchResults2 = AppService.showlist(search2);
+            StateHasChanged();
+        }
+    }
+
+    private void SelectShow1(Show s)
+    {
+        show1Id = s.Id;
+        search1 = s.name;
+        searchResults1 = null;
+    }
+
+    private void SelectShow2(Show s)
+    {
+        show2Id = s.Id;
+        search2 = s.name;
+        searchResults2 = null;
+    }
+
+    private void DoCompare()
+    {
+        if (show1Id > 0 && show2Id > 0)
+        {
+            comparison = AppService.CompareShows(show1Id, show2Id);
+        }
+    }
+}

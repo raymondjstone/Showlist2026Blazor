@@ -1,0 +1,27 @@
+@if (Tab != null)
+{
+    <div id="@Tab._TabId" class="tab-pane fade" role="tabpanel">
+        <div class="row"></div>
+        <div class="row fw-bold">
+            <div class="col-1">Date</div>
+            <div class="col-2">Show</div>
+            <div class="col-2">Episode</div>
+            <div class="col-1">Language</div>
+            <div class="col-2">Network(s)</div>
+            <div class="col-2">Genre</div>
+            <div class="col-1">Status</div>
+            <div class="col-1">Type</div>
+        </div>
+
+        @foreach (var ep in Tab._EpisodeList)
+        {
+            <EpisodeRow Episode="ep" OnFilterChanged="OnFilterChanged" OnWatchedChanged="OnWatchedChanged" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public AiringAroundNowTabModel Tab { get; set; }
+    [Parameter] public EventCallback<(long id, string type, bool? state)> OnFilterChanged { get; set; }
+    [Parameter] public EventCallback<(long id, bool state)> OnWatchedChanged { get; set; }
+}

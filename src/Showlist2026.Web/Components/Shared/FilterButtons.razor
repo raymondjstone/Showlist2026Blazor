@@ -1,0 +1,24 @@
+@if (Model != null)
+{
+    @if (Model.ShowPlus)
+    {
+        <i class="far fa-check-circle"
+           title="@($"Select {Model._ItemType}")"
+           role="button"
+           @onclick="() => OnFilterChanged.InvokeAsync((Model._ItemKey, Model._ItemType, (bool?)true))">
+        </i>
+    }
+    @if (Model.ShowNegative)
+    {
+        <i class="far fa-times-circle"
+           title="@($"Suppress {Model._ItemType}")"
+           role="button"
+           @onclick="() => OnFilterChanged.InvokeAsync((Model._ItemKey, Model._ItemType, (bool?)false))">
+        </i>
+    }
+}
+
+@code {
+    [Parameter] public FilterButtonsModel Model { get; set; }
+    [Parameter] public EventCallback<(long id, string type, bool? state)> OnFilterChanged { get; set; }
+}

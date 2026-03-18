@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(dotnet ef:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(head -2 /c/Code/Showlist2026/src/Showlist2026.Web/Components/Pages/Filters*.razor)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(while read:*)",
+      "Bash(do echo:*)",
+      "Bash(git show:*)",
+      "Bash(done)"
+    ]
+  }
+}

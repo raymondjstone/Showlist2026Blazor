@@ -1,0 +1,152 @@
+
+<div class="d-flex flex-column flex-shrink-0 p-3 bg-dark text-white sidebar-nav">
+    <a href="/" class="d-flex align-items-center mb-3 text-white text-decoration-none">
+        <i class="fas fa-tv me-2"></i>
+        <span class="fs-5 fw-bold">Showlist</span>
+    </a>
+    <ShowSearch />
+    <hr />
+    <ul class="nav nav-pills flex-column mb-auto">
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="" Match="NavLinkMatch.All">
+                <i class="fas fa-home me-2"></i> Home
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="airing">
+                <i class="fas fa-calendar-day me-2"></i> Airing Now
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="calendar">
+                <i class="fas fa-calendar-alt me-2"></i> Calendar
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="missed">
+                <i class="fas fa-clock me-2"></i> Missed
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="missed-shows">
+                <i class="fas fa-question-circle me-2"></i> Undecided
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="unwatched">
+                <i class="fas fa-eye-slash me-2"></i> Unwatched
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="coming-soon">
+                <i class="fas fa-star me-2"></i> Coming Soon
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="downloaded">
+                <i class="fas fa-download me-2"></i> Downloaded
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="no-folder">
+                <i class="fas fa-folder-open me-2"></i> No Folder
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="watched-history">
+                <i class="fas fa-history me-2"></i> Watch History
+            </NavLink>
+        </li>
+        <li><hr /></li>
+        <li class="nav-item small text-muted px-2 mb-1">Analytics</li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="stats">
+                <i class="fas fa-chart-bar me-2"></i> Statistics
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="download-progress">
+                <i class="fas fa-tasks me-2"></i> Downloads
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="search">
+                <i class="fas fa-search-plus me-2"></i> Advanced Search
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="trending">
+                <i class="fas fa-fire me-2"></i> Trending
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="compare">
+                <i class="fas fa-columns me-2"></i> Compare
+            </NavLink>
+        </li>
+        <li><hr /></li>
+        <li class="nav-item small text-muted px-2 mb-1">Filters</li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="filters/shows">
+                <i class="fas fa-tv me-2"></i> Shows
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="filters/genres">
+                <i class="fas fa-masks-theater me-2"></i> Genres
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="filters/networks">
+                <i class="fas fa-broadcast-tower me-2"></i> Networks
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="filters/webnetworks">
+                <i class="fas fa-globe me-2"></i> Web Networks
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="filters/countries">
+                <i class="fas fa-flag me-2"></i> Countries
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="filters/languages">
+                <i class="fas fa-language me-2"></i> Languages
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="filters/types">
+                <i class="fas fa-tags me-2"></i> Types
+            </NavLink>
+        </li>
+        <li><hr /></li>
+        <li class="nav-item small text-muted px-2 mb-1">Admin</li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="admin">
+                <i class="fas fa-cog me-2"></i> Admin
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="admin/nzbsites">
+                <i class="fas fa-search me-2"></i> NZB Sites
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <NavLink class="nav-link text-white" href="admin/tvdirectories">
+                <i class="fas fa-folder me-2"></i> TV Directories
+            </NavLink>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link text-white" href="/hangfire" target="_blank">
+                <i class="fas fa-tasks me-2"></i> Hangfire
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link text-white" href="/health" target="_blank">
+                <i class="fas fa-heartbeat me-2"></i> Health
+            </a>
+        </li>
+    </ul>
+</div>

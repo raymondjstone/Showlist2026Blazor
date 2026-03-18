@@ -1,0 +1,128 @@
+@page "/calendar"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Calendar</PageTitle>
+
+<div class="container-fluid mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <button class="btn btn-outline-secondary" @onclick="PreviousMonth">
+            <i class="fas fa-chevron-left"></i> Previous
+        </button>
+        <h4>@currentDate.ToString("MMMM yyyy")</h4>
+        <button class="btn btn-outline-secondary" @onclick="NextMonth">
+            Next <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+
+    @if (loading)
+    {
+        <div class="text-center"><div class="spinner-border" role="status"></div></div>
+    }
+    else
+    {
+        <div class="row fw-bold text-center border-bottom pb-2 mb-0">
+            @foreach (var day in new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" })
+            {
+                <div class="col">@day</div>
+            }
+        </div>
+
+        @foreach (var week in weeks)
+        {
+            <div class="row border-bottom" style="min-height: 100px;">
+                @foreach (var day in week)
+                {
+                    var isToday = day.Date == DateTimeOffset.Now.Date;
+                    var isCurrentMonth = day.Month == currentDate.Month;
+                    <div class="col p-1 @(!isCurrentMonth ? "text-muted bg-light" : "") @(isToday ? "border border-primary border-2" : "")">
+                        <div class="fw-bold small">@day.Day</div>
+                        @if (episodesByDate.TryGetValue(day.Date, out var dayEps))
+                        {
+                            @foreach (var ep in dayEps.Take(5))
+                            {
+                                var bgClass = ep.Activelyselected ? "bg-success" : ep.Activelyignored ? "bg-secondary" : "bg-info";
+                                <a href="/showlist/show/@ep.ep.show.Id"
+                                   class="d-block text-truncate text-white rounded px-1 mb-1 text-decoration-none @bgClass"
+                                   style="font-size: 0.7rem;" title="@ep.ep.show.name @ep.ep.EpNumberFormatted">
+                                    @ep.ep.show?.nameclean @ep.ep.EpNumberFormatted
+                                </a>
+                            }
+                            @if (dayEps.Count > 5)
+                            {
+                                <span class="text-muted" style="font-size: 0.65rem;">+@(dayEps.Count - 5) more</span>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private DateTimeOffset currentDate = DateTimeOffset.Now;
+    private List<EpFilter> episodes = new();
+    private Dictionary<DateTime, List<EpFilter>> episodesByDate = new();
+    private List<List<DateTimeOffset>> weeks = new();
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        StateHasChanged();
+
+        var firstOfMonth = new DateTimeOffset(currentDate.Year, currentDate.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var lastOfMonth = firstOfMonth.AddMonths(1).AddDays(-1);
+
+        int daysMinus = (int)(firstOfMonth - DateTimeOffset.UtcNow).TotalDays - 7;
+        int daysPlus = (int)(lastOfMonth - DateTimeOffset.UtcNow).TotalDays + 7;
+
+        episodes = AppService.AiringAroundNowForUser(daysMinus, daysPlus);
+
+        episodesByDate = episodes
+            .Where(e => e.ep?.AiringTime != null && e.ep.AiringTime != DateTimeOffset.MinValue)
+            .GroupBy(e => e.ep.AiringTime.Date)
+            .ToDictionary(g => g.Key, g => g.OrderBy(e => e.ep.AiringTime).ToList());
+
+        BuildWeeks();
+        loading = false;
+    }
+
+    private void BuildWeeks()
+    {
+        weeks = new List<List<DateTimeOffset>>();
+        var firstOfMonth = new DateTimeOffset(currentDate.Year, currentDate.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        int daysToMonday = ((int)firstOfMonth.DayOfWeek + 6) % 7;
+        var start = firstOfMonth.AddDays(-daysToMonday);
+
+        for (int w = 0; w < 6; w++)
+        {
+            var week = new List<DateTimeOffset>();
+            for (int d = 0; d < 7; d++)
+            {
+                week.Add(start.AddDays(w * 7 + d));
+            }
+            if (week[0].Month != currentDate.Month && week[6].Month != currentDate.Month)
+                break;
+            weeks.Add(week);
+        }
+    }
+
+    private async Task PreviousMonth()
+    {
+        currentDate = currentDate.AddMonths(-1);
+        await LoadData();
+    }
+
+    private async Task NextMonth()
+    {
+        currentDate = currentDate.AddMonths(1);
+        await LoadData();
+    }
+}

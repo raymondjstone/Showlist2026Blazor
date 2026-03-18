@@ -1,0 +1,158 @@
+@page "/missed"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Missed Stuff</PageTitle>
+
+@if (Tabs == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <ul class="nav nav-tabs flex-wrap" id="missedTabs" role="tablist">
+            @foreach (var tab in Tabs)
+            {
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link @(activeTab == tab._TabId ? "active" : "")"
+                            type="button" role="tab"
+                            @onclick="() => SetActiveTab(tab._TabId)">
+                        @tab._Name
+                    </button>
+                </li>
+            }
+        </ul>
+        <div class="tab-content" id="missedTabContent">
+            @foreach (var tab in Tabs)
+            {
+                @if (activeTab == tab._TabId)
+                {
+                    <div class="tab-pane fade show active" role="tabpanel">
+                        <div class="row"></div>
+                        <div class="row fw-bold">
+                            <div class="col-1">Date</div>
+                            <div class="col-2">Show</div>
+                            <div class="col-2">Episode</div>
+                            <div class="col-1">Language</div>
+                            <div class="col-2">Network(s)</div>
+                            <div class="col-2">Genre</div>
+                            <div class="col-1">Status</div>
+                            <div class="col-1">Type</div>
+                        </div>
+                        @foreach (var ep in tab._EpisodeList)
+                        {
+                            <EpisodeRow Episode="ep" OnFilterChanged="HandleFilterChanged" OnWatchedChanged="HandleWatchedChanged" />
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<AiringAroundNowTabModel> Tabs;
+    private string activeTab;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var days = (DateTime.Now - new DateTime(2016, 1, 1)).Days * -1;
+        var userAirList = AppService.AiringAroundNowForUser(days, 2)
+            .OrderByDescending(a => a.ep.AiringTime)
+            .ThenBy(a => a.ep.show.name)
+            .ThenBy(a => a.ep.season)
+            .ThenBy(a => a.ep.number).ToList();
+
+        Tabs = new List<AiringAroundNowTabModel>();
+
+        var newbies = new AiringAroundNowTabModel("New",
+            userAirList.Where(a => !a.Activelyselected).ToList());
+        if (newbies._EpisodeList.Count > 0)
+        {
+            Tabs.Add(newbies);
+        }
+
+        var missed = new AiringAroundNowTabModel("Missed",
+            userAirList.Where(a => a.Activelyselected && a.Missed).ToList());
+        if (missed._EpisodeList.Count > 0)
+        {
+            Tabs.Add(missed);
+        }
+
+        var temp = new AiringAroundNowTabModel("", new List<EpFilter>());
+        DateTime lastDate = DateTime.MinValue;
+        foreach (var e in userAirList.Where(a => a.Activelyselected && !a.Missed))
+        {
+            if (lastDate != ((DateTimeOffset)e.ep.AiringTime).Date)
+            {
+                if (temp._EpisodeList.Count > 0)
+                {
+                    Tabs.Add(temp);
+                }
+                string suffix = GetDaySuffix(((DateTimeOffset)e.ep.AiringTime).Date.Day);
+                temp = new AiringAroundNowTabModel(
+                    ((DateTimeOffset)e.ep.AiringTime).Date.ToString("dd") + suffix,
+                    new List<EpFilter>());
+            }
+            lastDate = ((DateTimeOffset)e.ep.AiringTime).Date;
+            temp._EpisodeList.Add(e);
+        }
+        if (temp._EpisodeList.Count > 0)
+        {
+            Tabs.Add(temp);
+        }
+
+        if (activeTab == null && Tabs.Any())
+        {
+            activeTab = Tabs.First()._TabId;
+        }
+    }
+
+    private string GetDaySuffix(int day)
+    {
+        if (day == 11 || day == 12 || day == 13) return "th";
+        return (day % 10) switch
+        {
+            1 => "st",
+            2 => "nd",
+            3 => "rd",
+            _ => "th"
+        };
+    }
+
+    private void SetActiveTab(string tabId)
+    {
+        activeTab = tabId;
+    }
+
+    private async Task HandleFilterChanged((long id, string type, bool? state) args)
+    {
+        switch (args.type.ToLower())
+        {
+            case "show": await AppService.ShowFilter(args.id, args.state); break;
+            case "language": await AppService.LanguageFilter(args.id, args.state); break;
+            case "network": await AppService.NetworkFilter(args.id, args.state); break;
+            case "webnetwork": await AppService.WebNetworkFilter(args.id, args.state); break;
+            case "type": await AppService.TypeFilter(args.id, args.state); break;
+            case "genre": await AppService.GenreFilter(args.id, args.state); break;
+            case "country": await AppService.CountryFilter(args.id, args.state); break;
+        }
+        await LoadData();
+    }
+
+    private async Task HandleWatchedChanged((long id, bool state) args)
+    {
+        await AppService.WatchedFilter(args.id, args.state);
+        await LoadData();
+    }
+}

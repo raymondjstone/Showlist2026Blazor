@@ -1,0 +1,268 @@
+@page "/unwatched"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Next Unwatched</PageTitle>
+
+@if (Tabs == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h4>Next Unwatched Episode Per Show (@Shows.Count shows)</h4>
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 small">Sort:</label>
+                <select class="form-select form-select-sm" style="width:auto" @onchange="OnSortChanged">
+                    <option value="behind" selected="@(currentSort == "behind")">Episodes Behind</option>
+                    <option value="name" selected="@(currentSort == "name")">Show Name</option>
+                    <option value="date" selected="@(currentSort == "date")">Air Date</option>
+                    <option value="priority" selected="@(currentSort == "priority")">Priority</option>
+                </select>
+            </div>
+        </div>
+        <ul class="nav nav-tabs flex-wrap" id="unwatchedTabs" role="tablist">
+            @foreach (var tab in Tabs)
+            {
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link @(activeTab == tab._TabId ? "active" : "")"
+                            type="button" role="tab"
+                            @onclick="() => SetActiveTab(tab._TabId)">
+                        @tab._Name (@tab._EpisodeList.Count)
+                    </button>
+                </li>
+            }
+        </ul>
+        <div class="tab-content" id="unwatchedTabContent">
+            @foreach (var tab in Tabs)
+            {
+                @if (activeTab == tab._TabId)
+                {
+                    <div class="tab-pane fade show active" role="tabpanel">
+                        <div class="row"></div>
+                        <div class="row fw-bold align-items-center">
+                            <div class="col-1">Behind</div>
+                            <div class="col-2">Show</div>
+                            <div class="col-1">Progress</div>
+                            <div class="col-2">Next Episode</div>
+                            <div class="col-1">Language</div>
+                            <div class="col-2">Network(s)</div>
+                            <div class="col-1">Status</div>
+                            <div class="col-1">Priority</div>
+                            <div class="col-1"></div>
+                        </div>
+                        @{ int rowIndex = 0; }
+                        @foreach (var ep in tab._EpisodeList)
+                        {
+                            var idx = rowIndex;
+                            <div class="row align-items-center @(selectedIndex == idx && activeTab == tab._TabId ? "episode-row-selected" : "")" id="unwatched-row-@idx">
+                                <div class="col-1">
+                                    @{
+                                        var badgeClass = ep.EpisodesBehind > 20 ? "bg-danger" :
+                                                         ep.EpisodesBehind > 5 ? "bg-warning text-dark" :
+                                                         ep.EpisodesBehind > 1 ? "bg-info" : "bg-success";
+                                    }
+                                    <span class="badge @badgeClass">@ep.EpisodesBehind eps</span>
+                                </div>
+                                <div class="col-2">
+                                    <a href="/showlist/show/@ep.ep.show.Id" target="_blank"
+                                       title="@ep.ep.show.summarycleanwithimage">
+                                        @ep.ep.show.name
+                                    </a>
+                                </div>
+                                <div class="col-1 d-flex align-items-center gap-1">
+                                    @if (ep.TotalAiredEpisodes > 0)
+                                    {
+                                        var pct = ep.TotalAiredEpisodes > 0 ? (int)(100.0 * ep.TotalWatchedEpisodes / ep.TotalAiredEpisodes) : 0;
+                                        <div class="progress progress-thin flex-grow-1" title="@ep.TotalWatchedEpisodes / @ep.TotalAiredEpisodes watched">
+                                            <div class="progress-bar bg-success" style="width: @(pct)%"></div>
+                                        </div>
+                                        <small class="text-muted text-nowrap">@ep.TotalWatchedEpisodes/@ep.TotalAiredEpisodes</small>
+                                    }
+                                </div>
+                                <div class="col-2">
+                                    <i class="far fa-eye" title="Mark as watched" role="button"
+                                       @onclick="() => HandleWatchedChanged((ep.ep.Id, true))">
+                                    </i>
+                                    @(ep.ep.EpNumberFormatted)
+                                    <a href="#" title="@ep.ep.summarycleanwithimage">@ep.ep.name</a>
+                                </div>
+                                <div class="col-1">
+                                    @if (ep.ep.show.Languages != null)
+                                    {
+                                        @ep.ep.show.Languages.name
+                                    }
+                                </div>
+                                <div class="col-2">
+                                    @if (ep.ep.show.Networks != null && !string.IsNullOrEmpty(ep.ep.show.Networks.name))
+                                    {
+                                        @ep.ep.show.Networks.name
+                                    }
+                                    @if (ep.ep.show.WebNetworks != null && !string.IsNullOrEmpty(ep.ep.show.WebNetworks.name))
+                                    {
+                                        @if (ep.ep.show.Networks != null && !string.IsNullOrEmpty(ep.ep.show.Networks.name))
+                                        {
+                                            <br />
+                                        }
+                                        @ep.ep.show.WebNetworks.name
+                                    }
+                                </div>
+                                <div class="col-1">
+                                    @{
+                                        var statusClass = ep.ep.show.status?.ToLower() switch
+                                        {
+                                            "running" => "bg-success",
+                                            "ended" => "bg-secondary",
+                                            "to be determined" => "bg-warning text-dark",
+                                            "in development" => "bg-info",
+                                            _ => "bg-light text-dark"
+                                        };
+                                    }
+                                    <span class="badge @statusClass">@ep.ep.show.status</span>
+                                </div>
+                                <div class="col-1">
+                                    @{
+                                        var priBadge = ep.ShowPriority switch
+                                        {
+                                            3 => ("bg-danger", "High"),
+                                            2 => ("bg-warning text-dark", "Med"),
+                                            1 => ("bg-info", "Low"),
+                                            _ => ("", "")
+                                        };
+                                    }
+                                    @if (!string.IsNullOrEmpty(priBadge.Item2))
+                                    {
+                                        <span class="badge @priBadge.Item1">@priBadge.Item2</span>
+                                    }
+                                </div>
+                                <div class="col-1">
+                                    <button class="btn btn-outline-success btn-sm" title="Catch up (mark all aired as watched)"
+                                            @onclick="() => CatchUpShow(ep.ep.show.Id)">
+                                        <i class="fas fa-forward"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            rowIndex++;
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="mt-2 text-muted small">
+            Keyboard: <kbd>j</kbd>/<kbd>k</kbd> navigate, <kbd>w</kbd> mark watched
+        </div>
+    </div>
+}
+
+@code {
+    private List<EpFilter> Shows;
+    private List<AiringAroundNowTabModel> Tabs;
+    private string activeTab;
+    private string currentSort = "behind";
+    private int selectedIndex = -1;
+    private DotNetObjectReference<NextUnwatched> dotNetRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("eval", @"
+                window._unwatchedKeyHandler = function(e) {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+                    if (e.key === 'j' || e.key === 'k' || e.key === 'w') {
+                        e.preventDefault();
+                        DotNet.invokeMethodAsync('Showlist2026.Web', 'HandleKeyPress', e.key);
+                    }
+                };
+                document.addEventListener('keydown', window._unwatchedKeyHandler);
+            ");
+        }
+    }
+
+    [JSInvokable("HandleKeyPress")]
+    public static async Task HandleKeyPressStatic(string key)
+    {
+        // Static method required for JS interop - instance version below handles actual logic
+    }
+
+    private async Task LoadData()
+    {
+        Shows = AppService.NextUnwatchedPerShow();
+        Shows = ApplySort(Shows);
+        Tabs = new List<AiringAroundNowTabModel>();
+
+        var behindGroups = new[]
+        {
+            ("1 Behind", Shows.Where(s => s.EpisodesBehind == 1).ToList()),
+            ("2-5 Behind", Shows.Where(s => s.EpisodesBehind >= 2 && s.EpisodesBehind <= 5).ToList()),
+            ("6-20 Behind", Shows.Where(s => s.EpisodesBehind >= 6 && s.EpisodesBehind <= 20).ToList()),
+            ("20+ Behind", Shows.Where(s => s.EpisodesBehind > 20).ToList())
+        };
+
+        foreach (var (name, list) in behindGroups)
+        {
+            if (list.Count > 0)
+                Tabs.Add(new AiringAroundNowTabModel(name, list));
+        }
+
+        if (activeTab == null && Tabs.Any())
+        {
+            activeTab = Tabs.First()._TabId;
+        }
+    }
+
+    private List<EpFilter> ApplySort(List<EpFilter> list)
+    {
+        return currentSort switch
+        {
+            "name" => list.OrderBy(s => s.ep?.show?.name).ToList(),
+            "date" => list.OrderBy(s => s.ep?.AiringTime).ToList(),
+            "priority" => list.OrderByDescending(s => s.ShowPriority).ThenBy(s => s.ep?.show?.name).ToList(),
+            _ => list.OrderByDescending(s => s.EpisodesBehind).ToList()
+        };
+    }
+
+    private async Task OnSortChanged(ChangeEventArgs e)
+    {
+        currentSort = e.Value?.ToString() ?? "behind";
+        await LoadData();
+    }
+
+    private void SetActiveTab(string tabId)
+    {
+        activeTab = tabId;
+        selectedIndex = -1;
+    }
+
+    private async Task HandleWatchedChanged((long id, bool state) args)
+    {
+        await AppService.WatchedFilter(args.id, args.state);
+        await LoadData();
+    }
+
+    private async Task CatchUpShow(long showId)
+    {
+        await AppService.CatchUpShow(showId);
+        await LoadData();
+    }
+
+    public void Dispose()
+    {
+        dotNetRef?.Dispose();
+        _ = JS.InvokeVoidAsync("eval", "if(window._unwatchedKeyHandler) { document.removeEventListener('keydown', window._unwatchedKeyHandler); }");
+    }
+}

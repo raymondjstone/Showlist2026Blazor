@@ -1,0 +1,126 @@
+@page "/missed-shows"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Missed Shows</PageTitle>
+
+@if (Tabs == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <div class="mb-2">
+            <button class="btn btn-sm btn-success" @onclick="() => BulkSetFilter(true)">
+                <i class="far fa-check-circle"></i> Select All on Tab
+            </button>
+            <button class="btn btn-sm btn-danger ms-1" @onclick="() => BulkSetFilter(false)">
+                <i class="far fa-times-circle"></i> Exclude All on Tab
+            </button>
+        </div>
+        <ul class="nav nav-tabs flex-wrap" id="missedShowsTabs" role="tablist">
+            @foreach (var tab in Tabs)
+            {
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link @(activeTab == tab._TabId ? "active" : "")"
+                            type="button" role="tab"
+                            @onclick="() => SetActiveTab(tab._TabId)">
+                        @tab._Name (@tab._EpisodeList.Count)
+                    </button>
+                </li>
+            }
+        </ul>
+        <div class="tab-content" id="missedShowsTabContent">
+            @foreach (var tab in Tabs)
+            {
+                @if (activeTab == tab._TabId)
+                {
+                    <div class="tab-pane fade show active" role="tabpanel">
+                        @foreach (var s in tab._EpisodeList)
+                        {
+                            <NewShowCard ShowFilter="s" OnFilterChanged="HandleFilterChanged" />
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<AiringAroundNowTabModel> Tabs;
+    private string activeTab;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var userAirList = AppService.UndecidedShows()
+            .OrderBy(a => a.ep.AiringTime)
+            .ThenBy(a => a.ep.show.name)
+            .ThenBy(a => a.ep.season)
+            .ThenBy(a => a.ep.number).ToList();
+
+        Tabs = new List<AiringAroundNowTabModel>();
+
+        var grouped = userAirList
+            .GroupBy(e =>
+            {
+                int year = ((DateTimeOffset)e.ep.AiringTime).Year;
+                return year < 2000 ? "19xx" : year.ToString();
+            })
+            .OrderBy(g => g.Key == "19xx" ? "0000" : g.Key);
+
+        foreach (var g in grouped)
+        {
+            Tabs.Add(new AiringAroundNowTabModel(g.Key, g.ToList()));
+        }
+
+        if (activeTab == null && Tabs.Any())
+        {
+            activeTab = Tabs.First()._TabId;
+        }
+    }
+
+    private void SetActiveTab(string tabId)
+    {
+        activeTab = tabId;
+    }
+
+    private async Task HandleFilterChanged((long id, string type, bool? state) args)
+    {
+        switch (args.type.ToLower())
+        {
+            case "show": await AppService.ShowFilter(args.id, args.state); break;
+            case "language": await AppService.LanguageFilter(args.id, args.state); break;
+            case "network": await AppService.NetworkFilter(args.id, args.state); break;
+            case "webnetwork": await AppService.WebNetworkFilter(args.id, args.state); break;
+            case "type": await AppService.TypeFilter(args.id, args.state); break;
+            case "genre": await AppService.GenreFilter(args.id, args.state); break;
+            case "country": await AppService.CountryFilter(args.id, args.state); break;
+        }
+        await LoadData();
+    }
+
+    private async Task BulkSetFilter(bool stateWanted)
+    {
+        var currentTab = Tabs?.FirstOrDefault(t => t._TabId == activeTab);
+        if (currentTab == null) return;
+
+        var showIds = currentTab._EpisodeList
+            .Select(e => (long)e.ep.show.Id)
+            .Distinct()
+            .ToList();
+
+        await AppService.BulkSetShowFilter(showIds, stateWanted);
+        await LoadData();
+    }
+}

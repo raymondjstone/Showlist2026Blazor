@@ -1,0 +1,99 @@
+@page "/trending"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Trending Shows</PageTitle>
+
+<div class="container-fluid">
+    <h4>Trending Shows</h4>
+
+    @if (loading)
+    {
+        <div class="text-center mt-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (error != null)
+    {
+        <div class="alert alert-danger">@error</div>
+    }
+    else if (shows != null)
+    {
+        <div class="row g-3">
+            @foreach (var s in shows)
+            {
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100">
+                        @if (!string.IsNullOrEmpty(s.ImageUrl))
+                        {
+                            <img src="@s.ImageUrl" class="card-img-top" alt="@s.Name" style="max-height:200px;object-fit:cover;" />
+                        }
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                @if (s.AlreadyTracked && s.LocalShowId.HasValue)
+                                {
+                                    <a href="/showlist/show/@s.LocalShowId">@s.Name</a>
+                                }
+                                else
+                                {
+                                    @s.Name
+                                }
+                            </h6>
+                            @if (!string.IsNullOrEmpty(s.Network))
+                            {
+                                <small class="text-muted">@s.Network</small><br />
+                            }
+                            @if (!string.IsNullOrEmpty(s.Type))
+                            {
+                                <span class="badge bg-secondary">@s.Type</span>
+                            }
+                            @if (!string.IsNullOrEmpty(s.Status))
+                            {
+                                var statusClass = s.Status?.ToLower() switch
+                                {
+                                    "running" => "bg-success",
+                                    "ended" => "bg-secondary",
+                                    "to be determined" => "bg-warning text-dark",
+                                    _ => "bg-light text-dark"
+                                };
+                                <span class="badge @statusClass">@s.Status</span>
+                            }
+                            @if (s.AlreadyTracked)
+                            {
+                                <span class="badge bg-info">Tracked</span>
+                            }
+                            @if (!string.IsNullOrEmpty(s.Summary))
+                            {
+                                <p class="card-text small mt-1">@((MarkupString)s.Summary)</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<TrendingShowModel> shows;
+    private bool loading = true;
+    private string error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            shows = await AppService.GetTrendingShows();
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load trending shows: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

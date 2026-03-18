@@ -1,0 +1,89 @@
+@page "/downloaded"
+@page "/downloaded/{Year:int}"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Downloaded Shows</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-3">
+            <select class="form-select" @onchange="OnYearChanged">
+                @for (int y = DateTime.Now.Year; y > 1990; y--)
+                {
+                    <option value="@y" selected="@(y == selectedYear)">@y</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @if (downloadedFiles == null)
+    {
+        <div class="text-center mt-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <h4>Downloaded Files (@downloadedFiles.Count)</h4>
+        @foreach (var s in downloadedFiles)
+        {
+            <div class="row">
+                <div class="col-7">@s.Name</div>
+                <div class="col-2">
+                    @if (s.Episode != null)
+                    {
+                        @s.Episode.show?.nameclean
+                    }
+                </div>
+                <div class="col-2">
+                    @if (s.Episode != null)
+                    {
+                        @s.Episode.EpNumberFormatted
+                    }
+                </div>
+                <div class="col-1">
+                    @if (s.Episode?.UserWatchedSelections != null && s.Episode.UserWatchedSelections.Any())
+                    {
+                        <span>UnWatched</span>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public int Year { get; set; }
+
+    private int selectedYear;
+    private List<TouchFile> downloadedFiles;
+
+    protected override async Task OnInitializedAsync()
+    {
+        selectedYear = Year > 0 ? Year : DateTime.Now.Year;
+        await LoadData();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Year > 0 && Year != selectedYear)
+        {
+            selectedYear = Year;
+            await LoadData();
+        }
+    }
+
+    private async Task OnYearChanged(ChangeEventArgs e)
+    {
+        selectedYear = int.Parse(e.Value.ToString());
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        downloadedFiles = await AppService.ShowDownloaded(selectedYear);
+    }
+}

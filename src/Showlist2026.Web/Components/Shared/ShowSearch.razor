@@ -1,0 +1,99 @@
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+@inject NavigationManager Nav
+
+<div class="position-relative">
+    <input type="text" class="form-control form-control-sm bg-secondary text-white border-secondary"
+           placeholder="Search shows..."
+           @bind="searchText" @bind:event="oninput" @bind:after="OnSearchChanged"
+           @onfocusin="() => showDropdown = true"
+           @onkeydown="HandleKeyDown" />
+    @if (showDropdown && results != null && results.Count > 0)
+    {
+        <div class="position-absolute w-100 bg-dark border border-secondary rounded-bottom shadow"
+             style="z-index: 1050; max-height: 300px; overflow-y: auto;">
+            @for (int i = 0; i < results.Count; i++)
+            {
+                var show = results[i];
+                var idx = i;
+                <div class="px-3 py-1 text-white @(idx == selectedIndex ? "bg-primary" : "")"
+                     style="cursor: pointer; font-size: 0.85rem;"
+                     @onclick="() => GoToShow(show)"
+                     @onmouseover="() => selectedIndex = idx">
+                    @show.select2ResultName
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string searchText = "";
+    private List<Show> results;
+    private bool showDropdown;
+    private int selectedIndex = -1;
+    private System.Timers.Timer debounceTimer;
+
+    protected override void OnInitialized()
+    {
+        debounceTimer = new System.Timers.Timer(300);
+        debounceTimer.AutoReset = false;
+        debounceTimer.Elapsed += async (s, e) =>
+        {
+            await InvokeAsync(() =>
+            {
+                if (searchText.Length >= 2)
+                {
+                    results = AppService.showlist(searchText).Take(20).ToList();
+                }
+                else
+                {
+                    results = null;
+                }
+                selectedIndex = -1;
+                StateHasChanged();
+            });
+        };
+    }
+
+    private void OnSearchChanged()
+    {
+        debounceTimer.Stop();
+        debounceTimer.Start();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (results == null || results.Count == 0) return;
+
+        if (e.Key == "ArrowDown")
+        {
+            selectedIndex = Math.Min(selectedIndex + 1, results.Count - 1);
+        }
+        else if (e.Key == "ArrowUp")
+        {
+            selectedIndex = Math.Max(selectedIndex - 1, 0);
+        }
+        else if (e.Key == "Enter" && selectedIndex >= 0)
+        {
+            GoToShow(results[selectedIndex]);
+        }
+        else if (e.Key == "Escape")
+        {
+            showDropdown = false;
+        }
+    }
+
+    private void GoToShow(Show show)
+    {
+        searchText = "";
+        results = null;
+        showDropdown = false;
+        Nav.NavigateTo($"/showlist/show/{show.Id}");
+    }
+
+    public void Dispose()
+    {
+        debounceTimer?.Dispose();
+    }
+}

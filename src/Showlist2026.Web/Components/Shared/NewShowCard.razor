@@ -1,0 +1,122 @@
+@if (ShowFilter?.ep?.show != null)
+{
+    var show = ShowFilter.ep.show;
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-3">
+                                <img src="@show.imagemed" class="img-fluid" />
+                            </div>
+                            <div class="col-9">
+                                <h2>
+                                    <FilterButtons Model="@ShowFilter.showFilter" OnFilterChanged="OnFilterChanged" />
+                                    <a href="/showlist/show/@show.Id">@show.name</a>
+                                    <i role="button" class="far fa-clipboard" title="Suggested regexp for show name"></i>
+                                </h2>
+
+                                <br />
+                                @if (show.Types != null)
+                                {
+                                    <FilterButtons Model="@ShowFilter.typeFilter" OnFilterChanged="OnFilterChanged" />
+                                    @(" ")@show.Types.type
+                                    <br />
+                                }
+                                @if (show.Genres != null)
+                                {
+                                    foreach (var g in show.Genres)
+                                    {
+                                        @if (g?.genretext?.UserGenreSelections != null && g.genretext.UserGenreSelections.Count > 0)
+                                        {
+                                            <FilterButtons Model="@ShowFilter.genreFilter(g.Id, g.genretext.UserGenreSelections.First().include)" OnFilterChanged="OnFilterChanged" />
+                                        }
+                                        else
+                                        {
+                                            <FilterButtons Model="@ShowFilter.genreFilter(g.Id, null)" OnFilterChanged="OnFilterChanged" />
+                                        }
+                                        @(g.genretext.genre + ", ")
+                                    }
+                                    <br />
+                                }
+                                @if (show.Languages != null)
+                                {
+                                    <FilterButtons Model="@ShowFilter.languageFilter" OnFilterChanged="OnFilterChanged" />
+                                    @show.Languages.name
+                                    <br />
+                                }
+                                @if (show.Networks != null && !string.IsNullOrEmpty(show.Networks.name))
+                                {
+                                    <FilterButtons Model="@ShowFilter.networkFilter" OnFilterChanged="OnFilterChanged" />
+                                    @show.Networks.name
+                                    @if (show.Networks.country != null && show.Networks.country.code != "??")
+                                    {
+                                        <text> (</text>
+                                        <FilterButtons Model="@ShowFilter.countryFilter(show.Networks.country.Id, null)" OnFilterChanged="OnFilterChanged" />
+                                        @(" " + show.Networks.country.code + ")")
+                                    }
+                                    <br />
+                                }
+                                @if (show.WebNetworks != null && !string.IsNullOrEmpty(show.WebNetworks.name))
+                                {
+                                    <FilterButtons Model="@ShowFilter.webnetworkFilter" OnFilterChanged="OnFilterChanged" />
+                                    @show.WebNetworks.name
+                                    @if (show.WebNetworks.country != null && show.WebNetworks.country.code != "??")
+                                    {
+                                        <text> (</text>
+                                        <FilterButtons Model="@ShowFilter.countryFilter(show.WebNetworks.country.Id, null)" OnFilterChanged="OnFilterChanged" />
+                                        @(" " + show.WebNetworks.country.code + ")")
+                                    }
+                                    <br />
+                                }
+                                @if (show.summary != null)
+                                {
+                                    @((MarkupString)show.summaryclean)
+                                }
+                                <br />
+                            </div>
+                        </div>
+
+                        @if (show.nextEpisode != null)
+                        {
+                            <div class="row">
+                                <div class="col-6">
+                                    <b>Next Episode</b>
+                                </div>
+                            </div>
+                            <div class="row fw-bold">
+                                <div class="col-1">Date</div>
+                                <div class="col-1">Episode</div>
+                                <div class="col-3">Name</div>
+                                <div class="col-7">Summary</div>
+                            </div>
+                            <div class="row bg-light">
+                                <div class="col-1">
+                                    @if (show.nextEpisode.AirDateOffset2 != null)
+                                    {
+                                        @(((DateTimeOffset)show.nextEpisode.AiringTime).Date.ToString("dd MMM yyyy"))
+                                    }
+                                </div>
+                                <div class="col-1">
+                                    @(show.nextEpisode.EpNumberFormatted)
+                                </div>
+                                <div class="col-3">
+                                    @show.nextEpisode.nameclean
+                                </div>
+                                <div class="col-7">
+                                    @((MarkupString)show.nextEpisode.summaryclean)
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public EpFilter ShowFilter { get; set; }
+    [Parameter] public EventCallback<(long id, string type, bool? state)> OnFilterChanged { get; set; }
+}

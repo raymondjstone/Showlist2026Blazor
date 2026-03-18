@@ -1,0 +1,25 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ${Showlist__TvNameListPath:-./tvnamelist}:/tvnamelist
+      - ${Showlist__ShowFolderBasePath:-./tv_name_list}:/tv_name_list
+    depends_on:
+      - db
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${DB_SA_PASSWORD:-YourStrong!Passw0rd}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+
+volumes:
+  sqldata:

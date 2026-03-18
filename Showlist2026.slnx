@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Showlist2026.Core/Showlist2026.Core.csproj" />
+    <Project Path="src/Showlist2026.Data/Showlist2026.Data.csproj" />
+    <Project Path="src/Showlist2026.Web/Showlist2026.Web.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".env" />
+    <File Path="setup-secrets.bat" />
+  </Folder>
+</Solution>

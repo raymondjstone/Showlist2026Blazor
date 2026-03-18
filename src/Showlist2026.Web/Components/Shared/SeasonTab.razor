@@ -1,0 +1,62 @@
+@if (Episodes != null && Episodes.Any())
+{
+    <div id="@("S" + Episodes.First().season)" role="tabpanel">
+        <div class="row"></div>
+        <div class="row fw-bold">
+            <div class="col-1">Date</div>
+            <div class="col-1">Episode</div>
+            <div class="col-3">Name</div>
+            <div class="col-7">Summary</div>
+        </div>
+
+        <div class="row">
+            <div class="col-1"></div>
+            <div class="col-1">
+                <i class="fas fa-tasks" title="Mark season as watched" role="button"
+                   @onclick="() => OnSeasonWatchedChanged.InvokeAsync((Episodes.First().show.Id, Episodes.First().season ?? 0, true))">
+                </i>
+            </div>
+            <div class="col-3"></div>
+            <div class="col-7"></div>
+        </div>
+
+        @foreach (var ep in Episodes)
+        {
+            <div class="row">
+                <div class="col-1">
+                    @if (ep.AirDateOffset2 != null)
+                    {
+                        @(((DateTimeOffset)ep.AiringTime).Date.ToString("dd MMM yyyy"))
+                    }
+                </div>
+                <div class="col-1">
+                    @if (ep.UserWatchedSelections == null || ep.UserWatchedSelections.Count == 0)
+                    {
+                        <i class="far fa-eye" title="Mark as watched" role="button"
+                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, true))">
+                        </i>
+                    }
+                    else
+                    {
+                        <i class="fas fa-trash-restore" title="Mark as NOT watched" role="button"
+                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, false))">
+                        </i>
+                    }
+                    @(ep.EpNumberFormatted)
+                </div>
+                <div class="col-3">
+                    @ep.name
+                </div>
+                <div class="col-7">
+                    @((MarkupString)ep.summaryclean)
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<Episode> Episodes { get; set; }
+    [Parameter] public EventCallback<(long id, bool state)> OnWatchedChanged { get; set; }
+    [Parameter] public EventCallback<(long seasonId, long season, bool state)> OnSeasonWatchedChanged { get; set; }
+}

@@ -1,0 +1,117 @@
+@page "/filters/shows"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Show Filters</PageTitle>
+
+@if (showSelections == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <h4>Show Filters</h4>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <p>
+                    Show filters only show items where you have actively setup a preference, this is due to the sheer number of shows.
+                </p>
+                <p>
+                    If you want to find a specific show you can use the search option here or on any other show page.
+                    You can then setup a name filter using the normal
+                    <i class="far fa-check-circle"></i> or <i class="far fa-times-circle"></i> buttons.
+                </p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" placeholder="Search shows..."
+                               @bind="searchText" @bind:event="oninput" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <br />
+        @foreach (var i in filteredShows)
+        {
+            <div class="row mb-1">
+                <div class="col-3">
+                    <a href="/showlist/show/@i.show.Id" title="@i.show.summary">
+                        @i.show.nameclean
+                    </a>
+                </div>
+                <div class="col-5">
+                    Started: <b>@i.show.ShowStart.Year</b>, Status: <b>@i.show.status</b>
+                </div>
+                @if (i.include)
+                {
+                    <div class="col-2">
+                        <button class="btn btn-success btn-sm" title="Click to remove the always included filter"
+                                @onclick="() => DeleteFilter(i.show.Id)">
+                            Always included
+                        </button>
+                    </div>
+                    <div class="col-2">
+                        <button class="btn btn-outline-secondary btn-sm" title="Always exclude show"
+                                @onclick="() => SetFilter(i.show.Id, false)">
+                            Always Exclude
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-2">
+                        <button class="btn btn-outline-secondary btn-sm" title="Always include show"
+                                @onclick="() => SetFilter(i.show.Id, true)">
+                            Always Include
+                        </button>
+                    </div>
+                    <div class="col-2">
+                        <button class="btn btn-danger btn-sm" title="Click to remove the always excluded filter"
+                                @onclick="() => DeleteFilter(i.show.Id)">
+                            Always Excluded
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<UserShowSelection> showSelections;
+    private string searchText = "";
+
+    private IEnumerable<UserShowSelection> filteredShows =>
+        string.IsNullOrWhiteSpace(searchText)
+            ? showSelections
+            : showSelections.Where(s => s.show.nameclean != null &&
+                s.show.nameclean.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        showSelections = AppService.ShowData().OrderBy(a => a.show.name).ToList();
+    }
+
+    private async Task SetFilter(long id, bool stateWanted)
+    {
+        await AppService.ShowFilter(id, stateWanted);
+        await LoadData();
+    }
+
+    private async Task DeleteFilter(long id)
+    {
+        await AppService.ShowFilter(id, null);
+        await LoadData();
+    }
+}

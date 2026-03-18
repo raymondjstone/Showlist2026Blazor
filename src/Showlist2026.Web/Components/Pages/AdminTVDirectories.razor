@@ -1,0 +1,177 @@
+@page "/admin/tvdirectories"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>TV Directories</PageTitle>
+
+@if (directories == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <h4>TV Directories</h4>
+        <br />
+        <div class="row fw-bold mb-2">
+            <div class="col-4">Name</div>
+            <div class="col-2">Days To Scan</div>
+            <div class="col-2">Filter</div>
+            <div class="col-2">Min File Size</div>
+            <div class="col-2"></div>
+        </div>
+
+        @foreach (var dir in directories)
+        {
+            <div class="row mb-2">
+                <div class="col-4">
+                    <input type="text" class="form-control form-control-sm"
+                           value="@GetEditState(dir.Id).Name"
+                           @onchange="(e) => UpdateName(dir.Id, e.Value.ToString())" />
+                </div>
+                <div class="col-2">
+                    <input type="text" class="form-control form-control-sm"
+                           value="@GetEditState(dir.Id).DaysToScan"
+                           @onchange="(e) => UpdateDaysToScan(dir.Id, e.Value.ToString())" />
+                </div>
+                <div class="col-2">
+                    <input type="text" class="form-control form-control-sm"
+                           value="@GetEditState(dir.Id).Filter"
+                           @onchange="(e) => UpdateFilter(dir.Id, e.Value.ToString())" />
+                </div>
+                <div class="col-2">
+                    <input type="text" class="form-control form-control-sm"
+                           value="@GetEditState(dir.Id).MinFileSize"
+                           @onchange="(e) => UpdateMinFileSize(dir.Id, e.Value.ToString())" />
+                </div>
+                <div class="col-2">
+                    <button class="btn btn-primary btn-sm" @onclick="() => SaveDir(dir.Id)">Save</button>
+                    <button class="btn btn-danger btn-sm ms-1" @onclick="() => DeleteDir(dir.Id)">Del</button>
+                </div>
+            </div>
+        }
+
+        <hr />
+        <h5>Add New Directory</h5>
+        <div class="row mb-2">
+            <div class="col-4">
+                <input type="text" class="form-control form-control-sm" @bind="newDir.Name" placeholder="Directory path" />
+            </div>
+            <div class="col-2">
+                <input type="text" class="form-control form-control-sm" @bind="newDir.DaysToScan" />
+            </div>
+            <div class="col-2">
+                <input type="text" class="form-control form-control-sm" @bind="newDir.Filter" placeholder="*.*" />
+            </div>
+            <div class="col-2">
+                <input type="text" class="form-control form-control-sm" @bind="newDir.MinFileSize" />
+            </div>
+            <div class="col-2">
+                <button class="btn btn-success btn-sm" @onclick="AddDir">Add</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="alert alert-info mt-2">@statusMessage</div>
+}
+
+@code {
+    private List<TVDirectories> directories;
+    private Dictionary<int, DirEditState> editStates = new();
+    private DirEditState newDir = new() { Name = "", DaysToScan = "7", Filter = "*.*", MinFileSize = "50000" };
+    private string statusMessage;
+
+    private class DirEditState
+    {
+        public string Name { get; set; }
+        public string DaysToScan { get; set; }
+        public string Filter { get; set; }
+        public string MinFileSize { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        directories = AppService.TvDirectories();
+        editStates.Clear();
+        foreach (var dir in directories)
+        {
+            editStates[dir.Id] = new DirEditState
+            {
+                Name = dir.Name ?? "",
+                DaysToScan = dir.DaysToScan.ToString(),
+                Filter = dir.Filter ?? "*.*",
+                MinFileSize = dir.MinFileSize.ToString()
+            };
+        }
+    }
+
+    private DirEditState GetEditState(int id)
+    {
+        return editStates.ContainsKey(id) ? editStates[id] : new DirEditState();
+    }
+
+    private void UpdateName(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].Name = value;
+    }
+
+    private void UpdateDaysToScan(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].DaysToScan = value;
+    }
+
+    private void UpdateFilter(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].Filter = value;
+    }
+
+    private void UpdateMinFileSize(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].MinFileSize = value;
+    }
+
+    private async Task SaveDir(int id)
+    {
+        var state = GetEditState(id);
+        if (!string.IsNullOrEmpty(state.Name))
+        {
+            int.TryParse(state.DaysToScan, out int days);
+            int.TryParse(state.MinFileSize, out int minSize);
+            await AppService.TVDirectoryUpdate(id, state.Name, days, state.Filter, minSize);
+            statusMessage = $"Saved: {state.Name}";
+            await LoadData();
+        }
+    }
+
+    private async Task DeleteDir(int id)
+    {
+        await AppService.TVDirectoryDelete(id);
+        statusMessage = "Deleted directory";
+        await LoadData();
+    }
+
+    private async Task AddDir()
+    {
+        if (!string.IsNullOrEmpty(newDir.Name))
+        {
+            int.TryParse(newDir.DaysToScan, out int days);
+            int.TryParse(newDir.MinFileSize, out int minSize);
+            AppService.TVDirectoryUpdate(-1, newDir.Name, days, newDir.Filter, minSize);
+            statusMessage = $"Added: {newDir.Name}";
+            newDir = new DirEditState { Name = "", DaysToScan = "7", Filter = "*.*", MinFileSize = "50000" };
+            await LoadData();
+        }
+    }
+}

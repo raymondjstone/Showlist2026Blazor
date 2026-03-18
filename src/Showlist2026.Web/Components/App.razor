@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["Showlist2026.Web.styles.css"]" />
+    <ImportMap />
+    <HeadOutlet @rendermode="InteractiveServer" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#0d6efd" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');</script>
+    <style>
+        #global-loading-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            z-index: 99999;
+            pointer-events: none;
+            background: transparent;
+            display: none;
+        }
+        #global-loading-bar.active {
+            display: block;
+        }
+        #global-loading-bar::after {
+            content: '';
+            display: block;
+            height: 100%;
+            width: 30%;
+            background: linear-gradient(90deg, #0d6efd, #0dcaf0, #0d6efd);
+            animation: loading-slide 0.8s ease-in-out infinite;
+        }
+        @@keyframes loading-slide {
+            0% { margin-left: -30%; }
+            100% { margin-left: 100%; }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="global-loading-bar"></div>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="_framework/blazor.web.js"></script>
+    <script>
+        (function () {
+            var bar = document.getElementById('global-loading-bar');
+
+            document.addEventListener('click', function (e) {
+                // Internal links
+                var link = e.target.closest('a[href]');
+                if (link && !link.target && link.href.startsWith(window.location.origin)) {
+                    bar.classList.add('active');
+                    return;
+                }
+                // Buttons and action icons
+                var btn = e.target.closest('button, [role="button"], i.far, i.fas');
+                if (btn) {
+                    bar.classList.add('active');
+                }
+            });
+
+            // Hide when Blazor finishes DOM updates
+            new MutationObserver(function () {
+                if (bar.classList.contains('active')) {
+                    clearTimeout(window._lbTimeout);
+                    window._lbTimeout = setTimeout(function () {
+                        bar.classList.remove('active');
+                    }, 200);
+                }
+            }).observe(document.body, { childList: true, subtree: true });
+        })();
+
+        // Dark mode
+        (function () {
+            var theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+            updateIcon(theme);
+
+            window.toggleDarkMode = function () {
+                var current = document.documentElement.getAttribute('data-theme') || 'light';
+                var next = current === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                updateIcon(next);
+            };
+
+            function updateIcon(t) {
+                var icon = document.getElementById('dark-mode-icon');
+                if (icon) {
+                    icon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+                }
+            }
+
+            // Re-apply after Blazor re-renders the layout
+            new MutationObserver(function () {
+                var t = localStorage.getItem('theme') || 'light';
+                document.documentElement.setAttribute('data-theme', t);
+                updateIcon(t);
+            }).observe(document.body, { childList: true });
+        })();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js');
+        }
+    </script>
+</body>
+
+</html>

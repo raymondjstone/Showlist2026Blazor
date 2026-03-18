@@ -1,0 +1,523 @@
+@page "/showlist/show/{ShowId:long}"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+@using Showlist2026.NZBPlanetApiJSON
+
+<PageTitle>@(show?.name ?? "Show")</PageTitle>
+
+@if (show == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-4">
+                <img src="@show.imagemed" class="img-fluid" />
+            </div>
+            <div class="col-8">
+                <h2>
+                    <FilterButtons Model="@ShowFilter.showFilter" OnFilterChanged="HandleFilterChanged" />
+                    <a href="https://www.tvmaze.com/shows/@show.showid">@show.name</a>
+                </h2>
+                <br />
+                Folder - @(show.FolderName ?? $"{show.SuggestedFolderName ?? show.DefaultFolderName} [default]")
+                <div class="float-end">
+                    <button class="btn btn-primary btn-sm" @onclick="() => showFolderModal = true">
+                        <i class="fa fa-plus-square"></i> Set Folder Name
+                    </button>
+                    <button class="btn btn-success btn-sm ms-1" @onclick="CatchUp" disabled="@catchingUp">
+                        @if (catchingUp) { <span class="spinner-border spinner-border-sm"></span> }
+                        <i class="fas fa-forward"></i> Catch Up
+                    </button>
+                </div>
+                <br />
+
+                @if (show.Types != null)
+                {
+                    <FilterButtons Model="@ShowFilter.typeFilter" OnFilterChanged="HandleFilterChanged" />
+                    @(" ")@show.Types.type
+                    <br />
+                }
+                @if (show.Genres != null)
+                {
+                    foreach (var g in show.Genres)
+                    {
+                        @if (g?.genretext?.UserGenreSelections != null && g.genretext.UserGenreSelections.Count > 0)
+                        {
+                            <FilterButtons Model="@ShowFilter.genreFilter(g.Id, g.genretext.UserGenreSelections.First().include)" OnFilterChanged="HandleFilterChanged" />
+                        }
+                        else
+                        {
+                            <FilterButtons Model="@ShowFilter.genreFilter(g.Id, null)" OnFilterChanged="HandleFilterChanged" />
+                        }
+                        @(g.genretext.genre + ", ")
+                    }
+                    <br />
+                }
+                @if (show.Languages != null)
+                {
+                    <FilterButtons Model="@ShowFilter.languageFilter" OnFilterChanged="HandleFilterChanged" />
+                    @show.Languages.name
+                    <br />
+                }
+                @if (show.Networks != null && !string.IsNullOrEmpty(show.Networks.name))
+                {
+                    <FilterButtons Model="@ShowFilter.networkFilter" OnFilterChanged="HandleFilterChanged" />
+                    @show.Networks.name
+                    @if (show.Networks.country != null && show.Networks.country.code != "??")
+                    {
+                        <text> (</text>
+                        <FilterButtons Model="@ShowFilter.countryFilter(show.Networks.country.Id, null)" OnFilterChanged="HandleFilterChanged" />
+                        @(" " + show.Networks.country.code + ")")
+                    }
+                    <br />
+                }
+                @if (show.WebNetworks != null && !string.IsNullOrEmpty(show.WebNetworks.name))
+                {
+                    <FilterButtons Model="@ShowFilter.webnetworkFilter" OnFilterChanged="HandleFilterChanged" />
+                    @show.WebNetworks.name
+                    @if (show.WebNetworks.country != null && show.WebNetworks.country.code != "??")
+                    {
+                        <text> (</text>
+                        <FilterButtons Model="@ShowFilter.countryFilter(show.WebNetworks.country.Id, null)" OnFilterChanged="HandleFilterChanged" />
+                        @(" " + show.WebNetworks.country.code + ")")
+                    }
+                    <br />
+                }
+                @if (show.summary != null)
+                {
+                    @((MarkupString)show.summaryclean)
+                }
+                <br />
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Priority</label>
+                        <select class="form-select form-select-sm" value="@showPriority" @onchange="OnPriorityChanged">
+                            <option value="0">None</option>
+                            <option value="1">Low</option>
+                            <option value="2">Medium</option>
+                            <option value="3">High</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <label class="form-label fw-bold">Notes</label>
+                    <textarea class="form-control form-control-sm" rows="3" @bind="showNotes"></textarea>
+                    <button class="btn btn-sm btn-outline-primary mt-1" @onclick="SaveNotes">Save Notes</button>
+                    @if (notesSaved)
+                    {
+                        <span class="text-success ms-2 small">Saved</span>
+                    }
+                </div>
+
+                @if (showWithSameName.Count > 0)
+                {
+                    <b>Shows that this show may get confused with:</b>
+                    foreach (var sd in showWithSameName)
+                    {
+                        <br />
+                        <a href="/showlist/show/@sd.Id" target="_blank">@sd.name [@sd.FolderName]</a>
+                    }
+                }
+            </div>
+        </div>
+
+        <br />
+
+        @if (nextEpisode != null)
+        {
+            <div class="row">
+                <div class="col-6"><b>Next Episode</b></div>
+            </div>
+            <div class="row fw-bold">
+                <div class="col-1">Date</div>
+                <div class="col-1">Episode</div>
+                <div class="col-3">Name</div>
+                <div class="col-7">Summary</div>
+            </div>
+            <div class="row bg-light">
+                <div class="col-1">
+                    @if (nextEpisode.AiringTime != null)
+                    {
+                        @(((DateTimeOffset)nextEpisode.AiringTime).Date.ToString("dd MMM yyyy"))
+                    }
+                </div>
+                <div class="col-1">
+                    <i class="far fa-eye" title="Mark as watched" role="button"
+                       @onclick="() => HandleWatchedChanged((nextEpisode.Id, true))">
+                    </i>
+                    @(nextEpisode.EpNumberFormatted)
+                </div>
+                <div class="col-3">@nextEpisode.nameclean</div>
+                <div class="col-7">@((MarkupString)nextEpisode.summaryclean)</div>
+            </div>
+            <br />
+        }
+    </div>
+    <br />
+
+    <div class="container-fluid">
+        <ul class="nav nav-tabs flex-wrap" id="seasonTabs" role="tablist">
+            @foreach (var tab in Tabs)
+            {
+                string pref = Tabs.Count < 10 ? "  Season " : "  S";
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link @(activeSeasonTab == "S" + tab.First().season ? "active" : "")"
+                            type="button" role="tab"
+                            @onclick="() => SetActiveSeasonTab(tab.First().season)">
+                        @(pref + tab.First().season)
+                    </button>
+                </li>
+            }
+        </ul>
+        <div class="tab-content" id="seasonTabContent">
+            @foreach (var tab in Tabs)
+            {
+                @if (activeSeasonTab == "S" + tab.First().season)
+                {
+                    <div class="tab-pane fade show active" role="tabpanel">
+                        <SeasonTab Episodes="tab" OnWatchedChanged="HandleWatchedChanged" OnSeasonWatchedChanged="HandleSeasonWatchedChanged" />
+                    </div>
+                }
+            }
+        </div>
+
+        @if (showFolderModal)
+        {
+            <FolderNameModal Show="show" OnFolderNameChanged="HandleFolderNameChanged" OnCancel="() => showFolderModal = false" />
+        }
+    </div>
+
+    @if (similarShows != null && similarShows.Any())
+    {
+        <div class="container-fluid mt-3">
+            <h5>Similar Shows</h5>
+            <div class="row g-2">
+                @foreach (var sim in similarShows)
+                {
+                    <div class="col">
+                        <div class="card h-100">
+                            <div class="d-flex align-items-center">
+                                @if (!string.IsNullOrEmpty(sim.imagemed))
+                                {
+                                    <img src="@sim.imagemed" alt="@sim.name" style="width:80px;height:112px;object-fit:cover;border-radius:4px 0 0 4px;" />
+                                }
+                                <div class="p-2" style="min-width:0;">
+                                    <a href="/showlist/show/@sim.Id" class="small">@sim.name</a>
+                                    @if (sim.Networks != null)
+                                    {
+                                        <br /><small class="text-muted">@sim.Networks.name</small>
+                                    }
+                                    @if (!string.IsNullOrEmpty(sim.status))
+                                    {
+                                        <br /><small class="badge bg-secondary">@sim.status</small>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="container-fluid">
+        @if (NZBFound?.Channel?.Item != null)
+        {
+            string lastep = "";
+            foreach (var z in NZBFound.Channel.Item)
+            {
+                if (lastep != z.EpNumberFormatted)
+                {
+                    lastep = z.EpNumberFormatted;
+                    <div class="row">
+                        <div class="col-12"><hr /></div>
+                    </div>
+                }
+                <NZBRow Item="z" />
+            }
+        }
+        <hr />
+        Alternative searches -
+        @if (TvSites != null && TvSites.Any())
+        {
+            foreach (var z in TvSites.Where(a => a.Active))
+            {
+                var url = z.URLTemplate
+                    .Replace("{URLSearchTerm}", show.URLSearchTerm)
+                    .Replace("{URLSearchTermNameOnly}", show.URLSearchTermNameOnly)
+                    .Replace("{URLSearchTermGeekSeek}", show.URLSearchTermGeekSeek);
+                <a href="@url" target="_blank" class="me-2">@z.Name</a>
+            }
+        }
+        <hr />
+    </div>
+}
+
+@code {
+    [Parameter] public long ShowId { get; set; }
+
+    private Show show;
+    private List<Show> showWithSameName = new();
+    private List<List<Episode>> Tabs = new();
+    private Episode nextEpisode;
+    private Episode lastEpisode;
+    private EpFilter ShowFilter;
+    private NzBplanetJSON NZBFound;
+    private List<TVSite> TvSites;
+    private string activeSeasonTab;
+    private bool showFolderModal;
+    private bool catchingUp;
+    private string showNotes = "";
+    private int showPriority;
+    private bool notesSaved;
+    private List<Show> similarShows = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        show = AppService.ShowPageData(ShowId);
+        TvSites = AppService.TvSites();
+
+        ShowFilter = new EpFilter(TvSites);
+
+        if (show.UserShowSelections == null)
+            show.UserShowSelections = new List<UserShowSelection>();
+        if (show.Networks != null && show.Networks.UserNetworkSelections == null)
+        {
+            show.Networks.UserNetworkSelections = new List<UserNetworkSelection>();
+            if (show.Networks.country != null && show.Networks.country.UserCountrySelections == null)
+                show.Networks.country.UserCountrySelections = new List<UserCountrySelection>();
+        }
+        if (show.WebNetworks != null && show.WebNetworks.UserWebNetworkSelections == null)
+        {
+            show.WebNetworks.UserWebNetworkSelections = new List<UserWebNetworkSelection>();
+            if (show.WebNetworks.country != null && show.WebNetworks.country.UserCountrySelections == null)
+                show.WebNetworks.country.UserCountrySelections = new List<UserCountrySelection>();
+        }
+        if (show.Types?.UserTypeSelections == null && show.Types != null)
+            show.Types.UserTypeSelections = new List<UserTypeSelection>();
+
+        if (show.Episodes != null && show.Episodes.Count > 0)
+            ShowFilter.ep = show.Episodes.FirstOrDefault();
+
+        ShowFilter.privuser = false;
+
+        // Set filter states from user selections
+        if (show.UserShowSelections != null)
+        {
+            var showf = show.UserShowSelections.FirstOrDefault(f => f.show.Id == show.Id);
+            if (showf != null)
+            {
+                ShowFilter.showinclude = showf.include;
+                ShowFilter.Activelyselected = showf.include;
+                ShowFilter.Activelyignored = !showf.include;
+            }
+        }
+        if (show.Types?.UserTypeSelections != null)
+        {
+            var typef = show.Types.UserTypeSelections.FirstOrDefault(f => f.type.Id == show.Types.Id);
+            if (typef != null)
+            {
+                ShowFilter.typeinclude = typef.include;
+                if (typef.include) ShowFilter.Activelyselected = true;
+                else ShowFilter.Activelyignored = true;
+            }
+        }
+        if (show.Networks?.UserNetworkSelections != null)
+        {
+            var x = show.Networks.UserNetworkSelections.FirstOrDefault(f => f.network.Id == show.Networks.Id);
+            if (x != null)
+            {
+                ShowFilter.networkinclude = x.include;
+                if (x.include) ShowFilter.Activelyselected = true;
+                else ShowFilter.Activelyignored = true;
+            }
+        }
+        if (show.WebNetworks?.UserWebNetworkSelections != null)
+        {
+            var x = show.WebNetworks.UserWebNetworkSelections.FirstOrDefault(f => f.webnetwork.Id == show.WebNetworks.Id);
+            if (x != null)
+            {
+                ShowFilter.webnetworkinclude = x.include;
+                if (x.include) ShowFilter.Activelyselected = true;
+                else ShowFilter.Activelyignored = true;
+            }
+        }
+        if (show.Languages?.UserLanguageSelections != null)
+        {
+            var x = show.Languages.UserLanguageSelections.FirstOrDefault(f => f.language.Id == show.Languages.Id);
+            if (x != null)
+            {
+                ShowFilter.languageinclude = x.include;
+                if (x.include) ShowFilter.Activelyselected = true;
+                else ShowFilter.Activelyignored = true;
+            }
+        }
+        if (show.Networks?.country?.UserCountrySelections != null)
+        {
+            var x = show.Networks.country.UserCountrySelections.FirstOrDefault(f => f.country.Id == show.Networks.country.Id);
+            if (x != null)
+            {
+                ShowFilter.countryinclude = x.include;
+                if (x.include) ShowFilter.Activelyselected = true;
+                else ShowFilter.Activelyignored = true;
+            }
+        }
+        if (show.WebNetworks?.country?.UserCountrySelections != null)
+        {
+            var x = show.WebNetworks.country.UserCountrySelections.FirstOrDefault(f => f.country.Id == show.WebNetworks.country.Id);
+            if (x != null)
+            {
+                if (ShowFilter.countryinclude == null) ShowFilter.countryinclude = x.include;
+                if (x.include) ShowFilter.Activelyselected = true;
+                else ShowFilter.Activelyignored = true;
+            }
+        }
+        if (show.Genres != null)
+        {
+            foreach (var g in show.Genres.Where(a => a.genretext?.UserGenreSelections != null))
+            {
+                if (g.genretext.UserGenreSelections == null)
+                    g.genretext.UserGenreSelections = new List<UserGenreSelection>();
+                var x = g.genretext.UserGenreSelections.FirstOrDefault(f => f.genretext.Id == g.genretext.Id);
+                if (x != null)
+                {
+                    if (ShowFilter.genreinclude == null) ShowFilter.genreinclude = x.include;
+                    if (x.include) ShowFilter.Activelyselected = true;
+                    else ShowFilter.Activelyignored = true;
+                }
+            }
+        }
+
+        // Build season tabs
+        Tabs = new List<List<Episode>>();
+        lastEpisode = null;
+        var episodes = (show.Episodes ?? new List<Episode>()).OrderByDescending(e => e.season).ThenBy(e => e.number);
+        nextEpisode = episodes.FirstOrDefault(e => e.AiringTime >= DateTimeOffset.UtcNow);
+        if (episodes.Any()) lastEpisode = episodes.Last();
+
+        var tab = new List<Episode>();
+        long lastSeason = long.MaxValue;
+        foreach (var ep in episodes)
+        {
+            if (ep.AiringTime <= DateTimeOffset.UtcNow && lastEpisode != null && ep.AiringTime > lastEpisode.AiringTime)
+                lastEpisode = ep;
+            if (lastSeason > (ep.season ?? 0))
+            {
+                if (lastSeason < long.MaxValue) Tabs.Add(tab);
+                tab = new List<Episode>();
+                lastSeason = (ep.season ?? 0);
+            }
+            tab.Add(ep);
+        }
+        if (lastSeason < long.MaxValue) Tabs.Add(tab);
+
+        if (activeSeasonTab == null && Tabs.Any())
+        {
+            activeSeasonTab = "S" + Tabs.First().First().season;
+        }
+
+        // NZB search
+        try
+        {
+            if (show.Episodes != null && show.Episodes.Any(f => (f.UserWatchedSelections?.Count ?? 0) == 0))
+            {
+                NZBFound = await AppService.NZBPlanetSearch(show);
+                if (NZBFound?.Channel?.Item != null)
+                {
+                    var unwatched = show.Episodes.Where(f => (f.UserWatchedSelections?.Count ?? 0) == 0).Select(f => f.EpNumberFormatted);
+                    NZBFound.Channel.Item = NZBFound.Channel.Item
+                        .Where(z => unwatched.Any(u => u == z.EpNumberFormatted))
+                        .OrderByDescending(e => e.EpNumberFormatted)
+                        .ThenBy(e => e.Sortkey)
+                        .ThenBy(e => e.SizeAsNumber)
+                        .ToList();
+                }
+            }
+        }
+        catch { }
+
+        showWithSameName = AppService.showlist(show.name)
+            .Where(s => s.name == show.name && s.showid != show.showid).ToList();
+
+        showNotes = show.Notes ?? "";
+        showPriority = show.UserShowSelections?.FirstOrDefault()?.Priority ?? 0;
+        notesSaved = false;
+        try { similarShows = AppService.GetSimilarShows(show.Id, 5); } catch { similarShows = new(); }
+    }
+
+    private void SetActiveSeasonTab(long? season)
+    {
+        activeSeasonTab = "S" + (season ?? 0);
+    }
+
+    private async Task HandleFilterChanged((long id, string type, bool? state) args)
+    {
+        switch (args.type.ToLower())
+        {
+            case "show": await AppService.ShowFilter(args.id, args.state); break;
+            case "language": await AppService.LanguageFilter(args.id, args.state); break;
+            case "network": await AppService.NetworkFilter(args.id, args.state); break;
+            case "webnetwork": await AppService.WebNetworkFilter(args.id, args.state); break;
+            case "type": await AppService.TypeFilter(args.id, args.state); break;
+            case "genre": await AppService.GenreFilter(args.id, args.state); break;
+            case "country": await AppService.CountryFilter(args.id, args.state); break;
+        }
+        await LoadData();
+    }
+
+    private async Task HandleWatchedChanged((long id, bool state) args)
+    {
+        await AppService.WatchedFilter(args.id, args.state);
+        await LoadData();
+    }
+
+    private async Task HandleSeasonWatchedChanged((long seasonId, long season, bool state) args)
+    {
+        await AppService.SeasonWatchedFilter(args.seasonId, args.season, args.state);
+        await LoadData();
+    }
+
+    private async Task HandleFolderNameChanged((long id, string name) args)
+    {
+        await AppService.SetFolderName(args.id, args.name);
+        showFolderModal = false;
+        await LoadData();
+    }
+
+    private async Task CatchUp()
+    {
+        catchingUp = true;
+        await AppService.CatchUpShow(show.Id);
+        catchingUp = false;
+        await LoadData();
+    }
+
+    private async Task SaveNotes()
+    {
+        await AppService.SetShowNotes(show.Id, showNotes);
+        notesSaved = true;
+    }
+
+    private async Task OnPriorityChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var pri))
+        {
+            showPriority = pri;
+            await AppService.SetShowPriority(show.Id, pri);
+        }
+    }
+}

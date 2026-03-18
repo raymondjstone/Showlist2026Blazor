@@ -1,0 +1,351 @@
+@page "/admin"
+@rendermode InteractiveServer
+@inject IShowListBackgroundService BackgroundService
+@inject IShowListAppService AppService
+@inject INotificationService NotificationService
+@inject IJSRuntime JS
+
+<PageTitle>Admin</PageTitle>
+
+<div class="container-fluid">
+    <h4>Admin Operations</h4>
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div class="alert @(isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+            @statusMessage
+            <button type="button" class="btn-close" @onclick="() => statusMessage = null"></button>
+        </div>
+    }
+
+    <div class="row g-3 mt-2">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Data Refresh</div>
+                <div class="card-body">
+                    <button class="btn btn-primary w-100 mb-2" @onclick="RefreshNetworks" disabled="@isRunning">
+                        <i class="fas fa-sync"></i> Refresh Networks
+                    </button>
+                    <button class="btn btn-primary w-100 mb-2" @onclick="RefreshShowBatch" disabled="@isRunning">
+                        <i class="fas fa-sync"></i> Refresh Show Batch
+                    </button>
+                    <button class="btn btn-primary w-100 mb-2" @onclick="RefreshShows" disabled="@isRunning">
+                        <i class="fas fa-sync"></i> Refresh Shows
+                    </button>
+                    <button class="btn btn-primary w-100 mb-2" @onclick="RefreshShowDates" disabled="@isRunning">
+                        <i class="fas fa-calendar-alt"></i> Refresh Show Dates
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Show Pages</div>
+                <div class="card-body">
+                    <button class="btn btn-warning w-100 mb-2" @onclick="RefreshShowPages" disabled="@isRunning">
+                        <i class="fas fa-file-alt"></i> Refresh Show Pages
+                    </button>
+                    <button class="btn btn-warning w-100 mb-2" @onclick="BacklogPage" disabled="@isRunning">
+                        <i class="fas fa-history"></i> Backlog Page
+                    </button>
+                    <button class="btn btn-warning w-100 mb-2" @onclick="PopulateShowFolderNames" disabled="@isRunning">
+                        <i class="fas fa-folder"></i> Populate Show Folder Names
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Notifications</div>
+                <div class="card-body">
+                    <button class="btn btn-info w-100 mb-2" @onclick="TestNotifications" disabled="@isRunning">
+                        <i class="fas fa-bell"></i> Test All Notifications
+                    </button>
+                    <button class="btn btn-outline-info w-100 mb-2" @onclick="TestPushover" disabled="@isRunning">
+                        <i class="fas fa-mobile-alt"></i> Test Pushover
+                    </button>
+                    <button class="btn btn-outline-info w-100 mb-2" @onclick="TestDiscord" disabled="@isRunning">
+                        <i class="fab fa-discord"></i> Test Discord
+                    </button>
+                    <button class="btn btn-outline-info w-100 mb-2" @onclick="TestEmail" disabled="@isRunning">
+                        <i class="fas fa-envelope"></i> Test Email
+                    </button>
+                    <button class="btn btn-info w-100 mb-2" @onclick="CleanNotifications" disabled="@isRunning">
+                        <i class="fas fa-broom"></i> Clean Notifications
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-2">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">Export / Import</div>
+                <div class="card-body">
+                    <button class="btn btn-success w-100 mb-2" @onclick="ExportData" disabled="@isRunning">
+                        <i class="fas fa-file-export"></i> Export User Data (JSON)
+                    </button>
+                    <button class="btn btn-success w-100 mb-2" @onclick="ExportCsv" disabled="@isRunning">
+                        <i class="fas fa-file-csv"></i> Export User Data (CSV)
+                    </button>
+                    <div class="mb-2">
+                        <label class="form-label">Import User Data</label>
+                        <InputFile OnChange="HandleImportFile" class="form-control" accept=".json" />
+                    </div>
+                    <button class="btn btn-outline-primary w-100" @onclick="ImportData" disabled="@(isRunning || string.IsNullOrEmpty(importJson))">
+                        <i class="fas fa-file-import"></i> Import
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">Duplicate Detection</div>
+                <div class="card-body">
+                    <button class="btn btn-warning w-100 mb-2" @onclick="FindDuplicates" disabled="@isRunning">
+                        <i class="fas fa-clone"></i> Find Duplicate Shows
+                    </button>
+                    @if (duplicateShows != null)
+                    {
+                        @if (duplicateShows.Count == 0)
+                        {
+                            <p class="text-success">No duplicates found.</p>
+                        }
+                        else
+                        {
+                            <p class="text-warning">@duplicateShows.Count potential duplicates:</p>
+                            <ul class="list-group">
+                                @foreach (var d in duplicateShows)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <a href="/showlist/show/@d.Id">@d.name</a>
+                                        <span class="text-muted small">TVMaze: @d.showid</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isRunning)
+    {
+        <div class="text-center mt-3">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Running...</span>
+            </div>
+            <p>Operation in progress...</p>
+        </div>
+    }
+</div>
+
+@code {
+    private string statusMessage;
+    private bool isError;
+    private bool isRunning;
+    private string importJson;
+
+    private async Task RunOperation(string name, Func<Task<bool>> operation)
+    {
+        isRunning = true;
+        isError = false;
+        statusMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await operation();
+            statusMessage = $"{name} completed successfully.";
+            isError = !result;
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"{name} failed: {ex.Message}";
+            isError = true;
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private async Task RefreshNetworks() =>
+        await RunOperation("Refresh Networks", BackgroundService.RefreshNetworks);
+
+    private async Task RefreshShowBatch() =>
+        await RunOperation("Refresh Show Batch", BackgroundService.RefreshShowBatch);
+
+    private async Task RefreshShows() =>
+        await RunOperation("Refresh Shows", BackgroundService.RefreshShows);
+
+    private async Task RefreshShowDates() =>
+        await RunOperation("Refresh Show Dates", BackgroundService.RefreshShowDates);
+
+    private async Task PopulateShowFolderNames() =>
+        await RunOperation("Populate Show Folder Names", BackgroundService.PopulateShowFolderNames);
+
+    private async Task BacklogPage() =>
+        await RunOperation("Backlog Page", BackgroundService.BacklogPage);
+
+    private async Task RefreshShowPages()
+    {
+        isRunning = true;
+        isError = false;
+        statusMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            int max = BackgroundService.GetEstimatedPageMax();
+            if (max < 200) max = 200;
+            var result = await BackgroundService.RefreshShowPage(0, max);
+            statusMessage = "Refresh Show Pages completed successfully.";
+            isError = !result;
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Refresh Show Pages failed: {ex.Message}";
+            isError = true;
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private async Task TestNotifications() =>
+        await RunOperation("Test Notifications", BackgroundService.Notificationtest);
+
+    private async Task TestPushover() => await TestChannel("Pushover", NotificationService.TestPushoverAsync);
+    private async Task TestDiscord() => await TestChannel("Discord", NotificationService.TestDiscordAsync);
+    private async Task TestEmail() => await TestChannel("Email", NotificationService.TestEmailAsync);
+
+    private async Task TestChannel(string name, Func<Task<(bool success, string error)>> test)
+    {
+        isRunning = true;
+        StatusMessage(null, false);
+        StateHasChanged();
+
+        try
+        {
+            var (success, error) = await test();
+            StatusMessage(success ? $"{name} test sent successfully." : $"{name} test failed: {error}", !success);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage($"{name} test failed: {ex.Message}", true);
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private async Task CleanNotifications() =>
+        await RunOperation("Clean Notifications", BackgroundService.CleanNotifications);
+
+    private async Task ExportData()
+    {
+        isRunning = true;
+        StatusMessage(null, false);
+        StateHasChanged();
+
+        try
+        {
+            var json = AppService.ExportUserDataAsJson();
+            var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("eval",
+                $"{{ var a = document.createElement('a'); a.href = 'data:application/json;base64,{base64}'; a.download = 'showlist-export.json'; a.click(); }}");
+            StatusMessage("Export downloaded.", false);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage($"Export failed: {ex.Message}", true);
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private async Task HandleImportFile(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        using var reader = new StreamReader(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+        importJson = await reader.ReadToEndAsync();
+        StatusMessage($"File loaded ({file.Name}, {file.Size:N0} bytes). Click Import to proceed.", false);
+    }
+
+    private async Task ImportData()
+    {
+        if (string.IsNullOrEmpty(importJson)) return;
+
+        isRunning = true;
+        StatusMessage(null, false);
+        StateHasChanged();
+
+        try
+        {
+            var count = await AppService.ImportUserDataFromJson(importJson);
+            StatusMessage($"Import completed. {count} records imported.", false);
+            importJson = null;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage($"Import failed: {ex.Message}", true);
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private void StatusMessage(string msg, bool error)
+    {
+        statusMessage = msg;
+        isError = error;
+    }
+
+    private List<Show> duplicateShows;
+
+    private void FindDuplicates()
+    {
+        try
+        {
+            duplicateShows = AppService.FindDuplicateShows();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage($"Duplicate check failed: {ex.Message}", true);
+        }
+    }
+
+    private async Task ExportCsv()
+    {
+        isRunning = true;
+        StatusMessage(null, false);
+        StateHasChanged();
+
+        try
+        {
+            var csv = AppService.ExportUserDataAsCsv();
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("eval",
+                $"{{ var a = document.createElement('a'); a.href = 'data:text/csv;base64,{base64}'; a.download = 'showlist-export.csv'; a.click(); }}");
+            StatusMessage("CSV export downloaded.", false);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage($"CSV export failed: {ex.Message}", true);
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+}

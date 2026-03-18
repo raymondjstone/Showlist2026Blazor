@@ -1,0 +1,167 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+@inject IJobStatusService JobService
+
+<PageTitle>Showlist - Home</PageTitle>
+
+@if (stats == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid mt-3">
+        <div class="row g-4">
+            <div class="col-6 col-lg">
+                <div class="card text-bg-primary">
+                    <div class="card-body">
+                        <h5 class="card-title">Shows</h5>
+                        <p class="card-text display-6">@stats.shows.ToString("N0")</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg">
+                <div class="card text-bg-success">
+                    <div class="card-body">
+                        <h5 class="card-title">Episodes</h5>
+                        <p class="card-text display-6">@stats.episodes.ToString("N0")</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg">
+                <div class="card text-bg-warning">
+                    <div class="card-body">
+                        <h5 class="card-title">Backlog Pages</h5>
+                        <p class="card-text display-6">@stats.backlogpages.ToString("N0")</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg">
+                <div class="card text-bg-danger">
+                    <div class="card-body">
+                        <h5 class="card-title">Shows Needing Update</h5>
+                        <p class="card-text display-6">@stats.showsNeedingUpdate.ToString("N0")</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg">
+                <div class="card text-bg-info">
+                    <div class="card-body">
+                        <h5 class="card-title">Updated (24h)</h5>
+                        <p class="card-text display-6">@stats.recentshows.Count.ToString("N0")</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (tonightsEpisodes != null && tonightsEpisodes.Any())
+        {
+            <div class="mt-4">
+                <h4>Tonight's Episodes (@tonightsEpisodes.Count)</h4>
+                <div class="row g-3">
+                    @foreach (var ep in tonightsEpisodes)
+                    {
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <a href="/showlist/show/@ep.ep.show.Id">@ep.ep.show.name</a>
+                                    </h6>
+                                    <p class="card-text mb-1">
+                                        @(ep.ep.EpNumberFormatted) - @ep.ep.name
+                                    </p>
+                                    @if (ep.ep.AiringTime != null)
+                                    {
+                                        <small class="text-muted">@(((DateTimeOffset)ep.ep.AiringTime).ToLocalTime().ToString("h:mm tt"))</small>
+                                    }
+                                    @if (ep.ep.show.Networks != null)
+                                    {
+                                        <small class="text-muted ms-2">@ep.ep.show.Networks.name</small>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (stats.recentshows.Any())
+        {
+            <div class="mt-4">
+                <h4>Shows Updated in Last 24 Hours (@stats.recentshows.Count)</h4>
+                <div class="list-group" style="max-height: 480px; overflow-y: auto;">
+                    @foreach (var show in stats.recentshows)
+                    {
+                        <a href="/showlist/show/@show.Id" class="list-group-item list-group-item-action">
+                            @show.name
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (jobs != null && jobs.Any())
+        {
+            <div class="mt-4">
+                <h4>Background Jobs</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>Job</th>
+                                <th>Schedule</th>
+                                <th>Last Run</th>
+                                <th>Next Run</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var job in jobs)
+                            {
+                                var badgeClass = job.LastStatus switch
+                                {
+                                    "Succeeded" => "bg-success",
+                                    "Failed" => "bg-danger",
+                                    "Processing" => "bg-warning",
+                                    _ => "bg-secondary"
+                                };
+                                <tr>
+                                    <td>@job.JobName</td>
+                                    <td class="text-muted small">@job.Cron</td>
+                                    <td>@(job.LastExecution?.ToString("dd MMM HH:mm") ?? "Never")</td>
+                                    <td>@(job.NextExecution?.ToString("dd MMM HH:mm") ?? "-")</td>
+                                    <td>
+                                        <span class="badge @badgeClass">@job.LastStatus</span>
+                                        @if (!string.IsNullOrEmpty(job.Error))
+                                        {
+                                            <i class="fas fa-exclamation-triangle text-danger ms-1" title="@job.Error"></i>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private HomePageStats stats;
+    private List<JobStatusModel> jobs;
+    private List<EpFilter> tonightsEpisodes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        stats = AppService.HomePageStats();
+        jobs = JobService.GetRecurringJobStatuses();
+        try { tonightsEpisodes = AppService.TonightsEpisodes(); } catch { tonightsEpisodes = new(); }
+    }
+}

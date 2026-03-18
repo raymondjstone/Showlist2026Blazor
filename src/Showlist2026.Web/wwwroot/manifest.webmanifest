@@ -1,0 +1,11 @@
+{
+  "name": "Showlist 2026",
+  "short_name": "Showlist",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#0d6efd",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
