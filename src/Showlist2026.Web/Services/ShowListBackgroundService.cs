@@ -1,16 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Flurl.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Showlist2026.Configuration;
 using Showlist2026.Data;
@@ -188,11 +178,9 @@ namespace Showlist2026.Services
 
             foreach (EpisodeData e in eps)
             {
-                bool oldrec = true;
                 Episode dbe = show.Episodes.FirstOrDefault(a => a.episodeid == e.Id);
                 if (dbe == null)
                 {
-                    oldrec = false;
                     dbe = new Episode();
                     show.Episodes.Add(dbe);
                 }

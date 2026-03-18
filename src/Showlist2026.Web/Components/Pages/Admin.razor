@@ -101,6 +101,44 @@
         </div>
         <div class="col-md-6">
             <div class="card">
+                <div class="card-header">Import Watched Shows from Paths</div>
+                <div class="card-body">
+                    <p class="text-muted small">Upload a text file with full file paths (one per line).<br/>
+                    Format: <code>xxxx\Show Folder\Season 1\Show.Name.S01E05.mkv</code></p>
+                    <div class="mb-2">
+                        <InputFile OnChange="HandleImportPathsFile" class="form-control" accept=".txt,.csv,.log" />
+                    </div>
+                    <button class="btn btn-outline-primary w-100" @onclick="ImportPaths" disabled="@(isRunning || string.IsNullOrEmpty(importPathsText))">
+                        <i class="fas fa-file-import"></i> Import Watched Shows
+                    </button>
+                    @if (importPathsResult != null)
+                    {
+                        <div class="mt-2">
+                            <p class="mb-1"><strong>@importPathsResult.Value.showsMatched</strong> shows marked as wanted</p>
+                            <p class="mb-1"><strong>@importPathsResult.Value.episodesMarked</strong> episodes marked as watched</p>
+                            <p class="mb-1"><strong>@importPathsResult.Value.linesSkipped</strong> lines skipped</p>
+                            @if (importPathsResult.Value.unmatchedFolders.Count > 0)
+                            {
+                                <details>
+                                    <summary class="text-warning">@importPathsResult.Value.unmatchedFolders.Count unmatched folders</summary>
+                                    <ul class="list-group mt-1" style="max-height:200px;overflow-y:auto;">
+                                        @foreach (var f in importPathsResult.Value.unmatchedFolders.OrderBy(x => x))
+                                        {
+                                            <li class="list-group-item list-group-item-warning py-1 small">@f</li>
+                                        }
+                                    </ul>
+                                </details>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-2">
+        <div class="col-md-6">
+            <div class="card">
                 <div class="card-header">Duplicate Detection</div>
                 <div class="card-body">
                     <button class="btn btn-warning w-100 mb-2" @onclick="FindDuplicates" disabled="@isRunning">
@@ -147,6 +185,8 @@
     private bool isError;
     private bool isRunning;
     private string importJson;
+    private string importPathsText;
+    private (int showsMatched, int episodesMarked, int linesSkipped, List<string> unmatchedFolders)? importPathsResult;
 
     private async Task RunOperation(string name, Func<Task<bool>> operation)
     {
@@ -321,6 +361,40 @@
         catch (Exception ex)
         {
             StatusMessage($"Duplicate check failed: {ex.Message}", true);
+        }
+    }
+
+    private async Task HandleImportPathsFile(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        using var reader = new StreamReader(file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024));
+        importPathsText = await reader.ReadToEndAsync();
+        importPathsResult = null;
+        StatusMessage($"File loaded ({file.Name}, {file.Size:N0} bytes). Click Import Watched Shows to proceed.", false);
+    }
+
+    private async Task ImportPaths()
+    {
+        if (string.IsNullOrEmpty(importPathsText)) return;
+
+        isRunning = true;
+        StatusMessage(null, false);
+        importPathsResult = null;
+        StateHasChanged();
+
+        try
+        {
+            importPathsResult = await AppService.ImportWatchedFromPaths(importPathsText);
+            StatusMessage($"Import completed. {importPathsResult.Value.showsMatched} shows matched, {importPathsResult.Value.episodesMarked} episodes marked watched.", false);
+            importPathsText = null;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage($"Import failed: {ex.Message}", true);
+        }
+        finally
+        {
+            isRunning = false;
         }
     }
 

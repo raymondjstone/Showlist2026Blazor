@@ -1547,13 +1547,6 @@ namespace Showlist2026.Services
                 .Include(a => a.Episode.UserWatchedSelections)
                 .Include(a => a.Episode.show);
 
-            int days = 180;
-            int minsize = 100000;
-            if (years != 0)
-            {
-                days = 365000;
-                minsize = 0;
-            }
             return downloads.Where(f => f.FileDate.Year == years || years == 0).ToList();
         }
 
@@ -2133,12 +2126,24 @@ namespace Showlist2026.Services
                     .Where(s => s.include)
                     .Select(s => s.show.showid)
                     .ToHashSet();
+                var ignoredShowIds = _db.UserShowSelections
+                    .Where(s => !s.include)
+                    .Select(s => s.show.showid)
+                    .ToHashSet();
+                var excludedTypes = _db.UserTypeSelections
+                    .Include(t => t.type)
+                    .Where(t => !t.include)
+                    .Select(t => t.type.type)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 var shows = new Dictionary<long, TrendingShowModel>();
                 foreach (var item in schedule)
                 {
                     if (!item.TryGetProperty("show", out var showEl)) continue;
                     var id = showEl.GetProperty("id").GetInt64();
+                    if (ignoredShowIds.Contains(id)) continue;
+                    var showType = showEl.TryGetProperty("type", out var tpCheck) ? tpCheck.GetString() : null;
+                    if (showType != null && excludedTypes.Contains(showType)) continue;
                     if (shows.ContainsKey(id)) { shows[id].EpisodeCount++; continue; }
 
                     shows[id] = new TrendingShowModel
@@ -2230,6 +2235,131 @@ namespace Showlist2026.Services
             }
 
             return sb.ToString();
+        }
+
+        public async Task<(int showsMatched, int episodesMarked, int linesSkipped, List<string> unmatchedFolders)> ImportWatchedFromPaths(string fileContent)
+        {
+            var lines = fileContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var seRegex = new Regex(@"[Ss](?<season>\d{1,4})[Ee](?<episode>\d{1,4})");
+            var seRegex2 = new Regex(@"(?<season>\d{1,4})[xX](?<episode>\d{1,4})");
+
+            // Build lookup: FolderName (DB field) -> Show
+            var allShows = _db.Shows.ToList();
+            var folderLookup = new Dictionary<string, Show>(StringComparer.OrdinalIgnoreCase);
+            foreach (var show in allShows)
+            {
+                // Only match shows that premiered in 2015 or earlier
+                if (show.ShowStart == DateTime.MinValue || show.ShowStart.Year > 2015)
+                    continue;
+                var folder = show.FolderName;
+                if (string.IsNullOrEmpty(folder))
+                    folder = show.DefaultFolderName;
+                if (!string.IsNullOrEmpty(folder) && !folderLookup.ContainsKey(folder))
+                    folderLookup[folder] = show;
+            }
+
+            var existingWantedShowIds = _db.UserShowSelections.Include(s => s.show).ToList()
+                .ToDictionary(s => s.show.Id, s => s);
+            var existingWatchedEpIds = _db.UserWatchedSelections.Include(w => w.episode)
+                .Select(w => w.episode.Id).ToHashSet();
+
+            var matchedShowIds = new HashSet<int>();
+            var unmatchedFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int episodesMarked = 0;
+            int linesSkipped = 0;
+
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim();
+                if (string.IsNullOrEmpty(trimmed)) continue;
+
+                // Parse path segments - support both \ and /
+                var parts = trimmed.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2) { linesSkipped++; continue; }
+
+                var fileName = parts[parts.Length - 1];
+
+                // Skip non-video files
+                var ext = Path.GetExtension(fileName).ToLowerInvariant();
+                if (ext != ".mkv" && ext != ".avi" && ext != ".mp4" && ext != ".wmv"
+                    && ext != ".flv" && ext != ".mov" && ext != ".m4v" && ext != ".ts"
+                    && ext != ".mpg" && ext != ".mpeg" && ext != ".webm")
+                { linesSkipped++; continue; }
+
+                // Extract season/episode from filename
+                var match = seRegex.Match(fileName);
+                if (!match.Success) match = seRegex2.Match(fileName);
+
+                long? seasonNum = null;
+                long? episodeNum = null;
+                if (match.Success)
+                {
+                    seasonNum = long.Parse(match.Groups["season"].Value);
+                    episodeNum = long.Parse(match.Groups["episode"].Value);
+                }
+
+                // Find show folder name - it's typically the grandparent of the file
+                // Pattern: xxxx\{show folder}\{Season X}\{filename}
+                // or:      xxxx\{show folder}\{filename}
+                string showFolder = null;
+                for (int i = parts.Length - 2; i >= 0; i--)
+                {
+                    var part = parts[i];
+                    // Skip season folders like "Season 1", "S01", "Series 1", "Specials"
+                    if (Regex.IsMatch(part, @"^(Season|Series|S)\s*\d+$", RegexOptions.IgnoreCase)
+                        || part.Equals("Specials", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    showFolder = part;
+                    break;
+                }
+
+                if (string.IsNullOrEmpty(showFolder)) { linesSkipped++; continue; }
+
+                // Match folder to show
+                if (!folderLookup.TryGetValue(showFolder, out var show))
+                {
+                    unmatchedFolders.Add(showFolder);
+                    linesSkipped++;
+                    continue;
+                }
+
+                // Mark show as wanted (but don't override if already explicitly excluded)
+                if (matchedShowIds.Add(show.Id))
+                {
+                    if (!existingWantedShowIds.ContainsKey(show.Id))
+                    {
+                        var sel = new UserShowSelection { show = show, include = true };
+                        _db.Add(sel);
+                    }
+                }
+
+                // Mark episode as watched
+                if (seasonNum.HasValue && episodeNum.HasValue)
+                {
+                    // For pre-2016 shows, mark all episodes up to and including this one as watched
+                    var isOlderShow = show.ShowStart != DateTime.MinValue && show.ShowStart.Year < 2016;
+                    var episodesToMark = isOlderShow
+                        ? _db.Episodes.Where(e => e.show.Id == show.Id &&
+                            (e.season < seasonNum || (e.season == seasonNum && e.number <= episodeNum))).ToList()
+                        : _db.Episodes.Where(e => e.show.Id == show.Id &&
+                            e.season == seasonNum && e.number == episodeNum).ToList();
+
+                    foreach (var ep in episodesToMark)
+                    {
+                        if (!existingWatchedEpIds.Contains(ep.Id))
+                        {
+                            _db.Add(new UserWatchedSelection { episode = ep });
+                            _db.Add(new WatchedHistory { episode = ep, WatchedDate = DateTimeOffset.UtcNow });
+                            existingWatchedEpIds.Add(ep.Id);
+                            episodesMarked++;
+                        }
+                    }
+                }
+            }
+
+            await _db.SaveChangesAsync();
+
+            return (matchedShowIds.Count, episodesMarked, linesSkipped, unmatchedFolders.ToList());
         }
     }
 }

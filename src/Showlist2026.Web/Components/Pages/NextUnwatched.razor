@@ -74,7 +74,7 @@ else
                                 </div>
                                 <div class="col-2">
                                     <a href="/showlist/show/@ep.ep.show.Id" target="_blank"
-                                       title="@ep.ep.show.summarycleanwithimage">
+                                       data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true" data-bs-content="@ep.ep.show.summarycleanwithimage">
                                         @ep.ep.show.name
                                     </a>
                                 </div>
@@ -93,7 +93,7 @@ else
                                        @onclick="() => HandleWatchedChanged((ep.ep.Id, true))">
                                     </i>
                                     @(ep.ep.EpNumberFormatted)
-                                    <a href="#" title="@ep.ep.summarycleanwithimage">@ep.ep.name</a>
+                                    <a href="#" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true" data-bs-content="@ep.ep.summarycleanwithimage">@ep.ep.name</a>
                                 </div>
                                 <div class="col-1">
                                     @if (ep.ep.show.Languages != null)

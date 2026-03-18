@@ -111,6 +111,42 @@
         })();
     </script>
     <script>
+        // Initialize Bootstrap popovers - manual trigger with click-to-dismiss
+        function initPopovers() {
+            document.querySelectorAll('.popover').forEach(function (p) { p.remove(); });
+            document.querySelectorAll('[data-popover-init]').forEach(function (el) {
+                var existing = bootstrap.Popover.getInstance(el);
+                if (existing) existing.dispose();
+                el.removeAttribute('data-popover-init');
+            });
+            document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
+                el.setAttribute('data-popover-init', '');
+                var pop = new bootstrap.Popover(el, { sanitize: false, container: 'body', trigger: 'manual' });
+                var showTimeout;
+                el.addEventListener('mouseenter', function () {
+                    showTimeout = setTimeout(function () { pop.show(); }, 300);
+                });
+                el.addEventListener('mouseleave', function () {
+                    clearTimeout(showTimeout);
+                });
+            });
+        }
+        // Click anywhere to dismiss all open popovers
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('.popover') && !e.target.closest('[data-bs-toggle="popover"]')) {
+                document.querySelectorAll('[data-popover-init]').forEach(function (el) {
+                    var p = bootstrap.Popover.getInstance(el);
+                    if (p) p.hide();
+                });
+            }
+        });
+        initPopovers();
+        new MutationObserver(function () {
+            clearTimeout(window._popoverTimeout);
+            window._popoverTimeout = setTimeout(initPopovers, 200);
+        }).observe(document.body, { childList: true, subtree: true });
+    </script>
+    <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/service-worker.js');
         }

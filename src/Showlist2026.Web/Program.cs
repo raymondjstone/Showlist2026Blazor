@@ -18,7 +18,7 @@ builder.Services.Configure<ShowlistOptions>(builder.Configuration.GetSection("Sh
 builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
 
 // EF Core
-builder.Services.AddDbContext<ShowlistDbContext>(options =>
+builder.Services.AddDbContextFactory<ShowlistDbContext>(options =>
     options.UseSqlServer(connectionString)
            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
