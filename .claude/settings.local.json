@@ -14,7 +14,8 @@
       "Bash(while read:*)",
       "Bash(do echo:*)",
       "Bash(git show:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth status 2>&1)"
     ]
   }
 }

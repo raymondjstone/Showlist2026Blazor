@@ -186,7 +186,7 @@ namespace Showlist2026.NZBPlanetApiJSON
         }
         public string GetAttr(Name name)
         {
-             return Attr.FirstOrDefault(a => a.Attributes.Name == name)?.Attributes?.Value;
+             return Attr?.FirstOrDefault(a => a.Attributes?.Name == name)?.Attributes?.Value;
         }
 
         public string EpNumberFormatted
