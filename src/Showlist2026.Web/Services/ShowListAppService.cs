@@ -317,7 +317,7 @@ namespace Showlist2026.Services
 
         }
 
-        public List<EpFilter> AiringAroundNowForUser(int daysminus = -15, int daysplus = 15, bool firstshowOnly = false)
+        public List<EpFilter> AiringAroundNowForUser(int daysminus = -15, int daysplus = 15, bool firstshowOnly = false, bool includeIgnored = false, bool includeWatched = false)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -438,11 +438,36 @@ namespace Showlist2026.Services
                 .ToList();
             _logger.LogDebug($"PERF[AiringAroundNow] New show S01E01 loaded ({newShowEps.Count} eps): {sw.ElapsedMilliseconds}ms");
 
-            var eps = selectedEps.Concat(newShowEps).ToList();
+            // Query 3: Episodes for ignored/excluded shows (only when includeIgnored is true, e.g. calendar)
+            var ignoredEps = new List<Episode>();
+            if (includeIgnored)
+            {
+                var ignoredShowIds = showFilters?
+                    .Where(s => !s.include)
+                    .Select(s => s.show.Id)
+                    .Where(id => !relevantShowIds.Contains(id))
+                    .ToList() ?? new List<int>();
+                if (ignoredShowIds.Count > 0)
+                {
+                    ignoredEps = _db.Episodes
+                        .Where(a => a.AirDateOffset2 >= min && a.AirDateOffset2 <= max
+                            && ignoredShowIds.Contains(a.show.Id))
+                        .Include(s => s.show)
+                        .Include(s => s.show.Languages)
+                        .Include(s => s.show.Types)
+                        .Include(s => s.show.WebNetworks)
+                        .Include(s => s.show.Networks)
+                        .ToList();
+                }
+                _logger.LogDebug($"PERF[AiringAroundNow] Ignored show episodes loaded ({ignoredEps.Count} eps): {sw.ElapsedMilliseconds}ms");
+            }
+
+            var eps = selectedEps.Concat(newShowEps).Concat(ignoredEps).ToList();
             _logger.LogDebug($"PERF[AiringAroundNow] Total episodes ({eps.Count} eps): {sw.ElapsedMilliseconds}ms");
 
             // Filter out watched episodes in memory (fast HashSet lookup)
-            eps = eps.Where(e => !watchedEpisodeIds.Contains(e.Id)).ToList();
+            if (!includeWatched)
+                eps = eps.Where(e => !watchedEpisodeIds.Contains(e.Id)).ToList();
             _logger.LogDebug($"PERF[AiringAroundNow] After watched filter ({eps.Count} eps): {sw.ElapsedMilliseconds}ms");
 
             // Attach genres to shows in memory using the genreShowMap we already loaded
@@ -476,17 +501,25 @@ namespace Showlist2026.Services
             List<EpFilter> EpFilters = new List<EpFilter>(eps.Count);
             foreach (var e in eps.Where(a => a.show != null))
             {
-                EpFilters.Add(
-                    CreateEpFilter(e, showFilterMap, networkFilterMap, webnetworkFilterMap,
-                        genreFilterMap, languageFilterMap, typeFilterMap, countryFilterMap, tvsites)
-                );
+                var ef = CreateEpFilter(e, showFilterMap, networkFilterMap, webnetworkFilterMap,
+                        genreFilterMap, languageFilterMap, typeFilterMap, countryFilterMap, tvsites);
+                ef.activelywatched = watchedEpisodeIds.Contains(e.Id);
+                EpFilters.Add(ef);
             }
 
             // Watched episodes already excluded at DB level
-            var filtered = EpFilters.Where(i =>
-                  i.Activelyselected ||
-                      (!i.Activelyignored && i.ep.number == 1 && i.ep.season == 1 ) //Not actively selected so only include S01E01 for speed reasons
-                                            );
+            IEnumerable<EpFilter> filtered;
+            if (includeIgnored)
+            {
+                filtered = EpFilters;
+            }
+            else
+            {
+                filtered = EpFilters.Where(i =>
+                    i.Activelyselected ||
+                        (!i.Activelyignored && i.ep.number == 1 && i.ep.season == 1) //Not actively selected so only include S01E01 for speed reasons
+                );
+            }
 
             var result = filtered.ToList();
             _logger.LogDebug($"PERF[AiringAroundNow] TOTAL: {sw.ElapsedMilliseconds}ms | {result.Count} results from {eps.Count} episodes, daysminus={daysminus}, daysplus={daysplus}, firstshowOnly={firstshowOnly}");

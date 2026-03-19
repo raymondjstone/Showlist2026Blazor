@@ -6,14 +6,17 @@
 
 <div class="container-fluid mt-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
+        <div class="d-flex align-items-center gap-1">
             <button class="btn btn-outline-secondary" @onclick="Previous">
                 <i class="fas fa-chevron-left"></i>
             </button>
-            <button class="btn btn-outline-secondary ms-1" @onclick="GoToToday">Today</button>
-            <button class="btn btn-outline-secondary ms-1" @onclick="Next">
+            <button class="btn btn-outline-secondary" @onclick="GoToToday">Today</button>
+            <button class="btn btn-outline-secondary" @onclick="Next">
                 <i class="fas fa-chevron-right"></i>
             </button>
+            <input type="date" class="form-control form-control-sm ms-2" style="width:auto;"
+                   value="@jumpDate.ToString("yyyy-MM-dd")"
+                   @onchange="HandleJumpDate" />
         </div>
         <h4 class="mb-0">
             @if (viewMode == "month")
@@ -61,13 +64,11 @@
                             @foreach (var ep in dayEps.Take(4))
                             {
                                 var bgClass = GetEpisodeBgClass(ep);
-                                var watched = ep.ep.UserWatchedSelections?.Count > 0;
                                 <a href="/showlist/show/@ep.ep.show.Id"
                                    class="d-block text-truncate text-white rounded px-1 mb-1 text-decoration-none @bgClass"
                                    style="font-size: 0.7rem;"
                                    data-bs-toggle="popover" data-bs-html="true"
                                    data-bs-content="@ep.ep.show.summarycleanwithimage">
-                                    @if (watched) { <i class="fas fa-check-circle" style="font-size:0.6rem"></i> }
                                     @ep.ep.show?.nameclean @ep.ep.EpNumberFormatted
                                 </a>
                             }
@@ -109,18 +110,16 @@
                         @foreach (var ep in dayEps)
                         {
                             var bgClass = GetEpisodeBgClass(ep);
-                            var watched = ep.ep.UserWatchedSelections?.Count > 0;
                             <a href="/showlist/show/@ep.ep.show.Id"
                                class="d-block text-white rounded px-2 py-1 mb-1 text-decoration-none @bgClass"
                                style="font-size: 0.8rem;"
                                data-bs-toggle="popover" data-bs-html="true"
                                data-bs-content="@ep.ep.show.summarycleanwithimage">
-                                @if (watched) { <i class="fas fa-check-circle me-1" style="font-size:0.7rem"></i> }
                                 <strong>@ep.ep.show?.nameclean</strong><br />
                                 <span style="font-size:0.7rem;">
                                     @ep.ep.EpNumberFormatted
                                     @if (!string.IsNullOrEmpty(ep.ep.name)) { <text> – @ep.ep.name</text> }
-                                    @if (!string.IsNullOrEmpty(ep.ep.airtime)) { <text> @ep.ep.airtime</text> }
+                                    @if (!string.IsNullOrEmpty(ep.ep.airtime)) { <text> &nbsp; @ep.ep.airtime</text> }
                                 </span>
                             </a>
                         }
@@ -148,12 +147,10 @@
                         @foreach (var ep in selectedDayEps)
                         {
                             var bgClass = GetEpisodeBgClass(ep);
-                            var watched = ep.ep.UserWatchedSelections?.Count > 0;
                             <div class="d-flex align-items-center mb-2">
                                 <span class="badge @bgClass me-2">@ep.ep.EpNumberFormatted</span>
                                 <div>
                                     <a href="/showlist/show/@ep.ep.show.Id">@ep.ep.show?.name</a>
-                                    @if (watched) { <i class="fas fa-check-circle text-success ms-1" style="font-size:0.7rem"></i> }
                                     @if (!string.IsNullOrEmpty(ep.ep.name))
                                     {
                                         <br /><small class="text-muted">@ep.ep.name</small>
@@ -173,10 +170,9 @@
 
     @* ── Legend ── *@
     <div class="d-flex gap-3 mt-3 small">
-        <span><span class="badge bg-success">&nbsp;</span> Wanted</span>
-        <span><span class="badge bg-info">&nbsp;</span> Undecided</span>
-        <span><span class="badge bg-secondary">&nbsp;</span> Ignored</span>
-        <span><i class="fas fa-check-circle text-success"></i> Watched</span>
+        <span><span class="badge cal-wanted">&nbsp;&nbsp;</span> Wanted</span>
+        <span><span class="badge cal-undecided">&nbsp;&nbsp;</span> Undecided</span>
+        <span><span class="badge cal-watched">&nbsp;&nbsp;</span> Watched</span>
     </div>
 </div>
 
@@ -193,6 +189,10 @@
     [data-theme="dark"] .calendar-today {
         background-color: rgba(13, 110, 253, 0.15) !important;
     }
+    .cal-wanted { background-color: #198754; color: #fff; }
+    .cal-undecided { background-color: #e67e22; color: #fff; }
+    .cal-ignored { background-color: #6c757d; color: #fff; }
+    .cal-watched { background-color: #b0c4b0; color: #555; opacity: 0.7; }
 </style>
 
 @code {
@@ -204,7 +204,8 @@
     private Dictionary<DateTime, List<EpFilter>> episodesByDate = new();
     private List<List<DateTimeOffset>> weeks = new();
     private bool loading = true;
-    private string viewMode = "month";
+    private string viewMode = "week";
+    private DateTime jumpDate = DateTime.Now.Date;
 
     // Day detail modal
     private List<EpFilter>? selectedDayEps;
@@ -238,12 +239,17 @@
         int daysMinus = (int)(rangeStart - DateTimeOffset.UtcNow).TotalDays;
         int daysPlus = (int)(rangeEnd - DateTimeOffset.UtcNow).TotalDays;
 
-        episodes = AppService.AiringAroundNowForUser(daysMinus, daysPlus);
+        episodes = AppService.AiringAroundNowForUser(daysMinus, daysPlus, includeWatched: true);
 
         episodesByDate = episodes
             .Where(e => e.ep?.AiringTime != null && e.ep.AiringTime != DateTimeOffset.MinValue)
             .GroupBy(e => e.ep.AiringTime.Date)
-            .ToDictionary(g => g.Key, g => g.OrderBy(e => e.ep.AiringTime).ToList());
+            .ToDictionary(g => g.Key, g => g
+                .OrderBy(e => e.ep.airtime ?? "")
+                .ThenBy(e => e.ep.show?.name ?? "")
+                .ThenBy(e => e.ep.season ?? 0)
+                .ThenBy(e => e.ep.number ?? 0)
+                .ToList());
 
         if (viewMode == "month")
             BuildWeeks();
@@ -278,6 +284,17 @@
         await LoadData();
     }
 
+    private async Task HandleJumpDate(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            jumpDate = date;
+            currentDate = new DateTimeOffset(date, TimeSpan.Zero);
+            weekStart = GetMonday(currentDate);
+            await LoadData();
+        }
+    }
+
     private async Task Next()
     {
         if (viewMode == "month")
@@ -310,9 +327,10 @@
 
     private static string GetEpisodeBgClass(EpFilter ep)
     {
-        if (ep.Activelyselected) return "bg-success";
-        if (ep.Activelyignored) return "bg-secondary";
-        return "bg-info";
+        if (ep.activelywatched) return "cal-watched";
+        if (ep.Activelyselected) return "cal-wanted";
+        if (ep.Activelyignored) return "cal-ignored";
+        return "cal-undecided";
     }
 
     private void ShowDayDetail(DateTime date, List<EpFilter> eps)
