@@ -1038,6 +1038,9 @@ namespace Showlist2026.Services
 
             if (!newSeasonEps.Any()) return;
 
+            newSeasonEps = newSeasonEps.Where(e => e.show != null).ToList();
+            if (!newSeasonEps.Any()) return;
+
             var newSeasonShowIds = newSeasonEps.Select(e => e.show.Id).Distinct().ToHashSet();
 
             // Find shows selected as wanted
@@ -1071,6 +1074,7 @@ namespace Showlist2026.Services
             hps.episodes = _db.Episodes.Count();
 
             hps.showsNeedingUpdate = _db.Shows.Count(a => a.needsupdate);
+            hps.watchedEpisodes = _db.UserWatchedSelections.Count();
 
             var cutoff24h = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeSeconds().ToString();
             hps.recentshows = _db.Shows

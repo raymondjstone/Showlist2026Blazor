@@ -9,7 +9,7 @@ namespace Showlist2026.Models
 
         public int shows=0;
         public int episodes=0;
-        public int backlogpages=0;
+        public int watchedEpisodes=0;
         public int showsNeedingUpdate=0;
         public List<Show> recentshows = new List<Show>();
 

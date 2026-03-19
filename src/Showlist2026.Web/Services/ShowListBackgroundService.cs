@@ -37,12 +37,7 @@ namespace Showlist2026.Services
             hps.shows = _db.Shows.Count();
             hps.episodes = _db.Episodes.Count();
 
-            List<Show> distinctPage = _db.Shows.Where(a => a.needsupdate)
-              .GroupBy(p => p.page)
-              .Select(g => g.First())
-              .ToList();
-
-            hps.backlogpages = distinctPage.Count();
+            hps.watchedEpisodes = _db.UserWatchedSelections.Count();
 
             return hps;
         }
