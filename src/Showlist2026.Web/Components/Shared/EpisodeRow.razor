@@ -12,7 +12,7 @@
         <div class="col-2">
             <FilterButtons Model="@Episode.showFilter" OnFilterChanged="OnFilterChanged" />
             <a href="/showlist/show/@Episode.ep.show.Id" target="_blank"
-               data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true" data-bs-content="@Episode.ep.show.summarycleanwithimage">
+               data-bs-toggle="popover" data-bs-html="true" data-bs-content="@Episode.ep.show.summarycleanwithimage">
                 @Episode.ep.show.name
             </a>
             @if (Episode.privuser)
@@ -42,7 +42,7 @@
                @onclick="() => OnWatchedChanged.InvokeAsync((Episode.ep.Id, true))">
             </i>
             @(Episode.ep.EpNumberFormatted)
-            <a href="#" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true" data-bs-content="@Episode.ep.summarycleanwithimage">@Episode.ep.name</a>
+            <a href="#" data-bs-toggle="popover" data-bs-html="true" data-bs-content="@Episode.ep.summarycleanwithimage">@Episode.ep.name</a>
         </div>
         <div class="col-1">
             @if (Episode.ep.show.Languages != null)

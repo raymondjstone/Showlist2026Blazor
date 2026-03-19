@@ -1,0 +1,184 @@
+@page "/storage"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Storage Dashboard</PageTitle>
+
+@if (model == null)
+{
+    <div class="text-center mt-5"><div class="spinner-border" role="status"></div></div>
+}
+else
+{
+    <div class="container-fluid mt-3">
+        <h4>Storage Dashboard</h4>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card text-bg-primary">
+                    <div class="card-body">
+                        <h6 class="card-title">Total Size</h6>
+                        <p class="display-6">@FormatSize(model.TotalSizeBytes)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-bg-success">
+                    <div class="card-body">
+                        <h6 class="card-title">Matched Folders</h6>
+                        <p class="display-6">@model.MatchedFolders</p>
+                        <small>of @model.TotalFolders total</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-bg-warning">
+                    <div class="card-body">
+                        <h6 class="card-title">Unmatched Folders</h6>
+                        <p class="display-6">@model.UnmatchedFolders</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-bg-info">
+                    <div class="card-body">
+                        <h6 class="card-title">Total Files</h6>
+                        <p class="display-6">@model.Shows.Sum(s => s.FileCount).ToString("N0")</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-auto">
+                <select class="form-select form-select-sm" @bind="filterMode">
+                    <option value="all">All Folders</option>
+                    <option value="matched">Matched Only</option>
+                    <option value="unmatched">Unmatched Only</option>
+                    <option value="wanted">Wanted Shows</option>
+                    <option value="notwanted">Not Wanted</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" @bind="sortMode">
+                    <option value="size">Largest First</option>
+                    <option value="name">Name (A-Z)</option>
+                    <option value="files">Most Files</option>
+                    <option value="smallest">Smallest First</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+                <span>Show Folders (@FilteredShows.Count() folders, @FormatSize(FilteredShows.Sum(s => s.SizeBytes)))</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Folder</th>
+                            <th>Show</th>
+                            <th class="text-end">Size</th>
+                            <th class="text-end">Files</th>
+                            <th class="text-end">Seasons</th>
+                            <th>Status</th>
+                            <th style="width:30%">Size</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var show in FilteredShows)
+                        {
+                            var pct = maxSize > 0 ? (int)(show.SizeBytes * 100 / maxSize) : 0;
+                            var barClass = string.IsNullOrEmpty(show.ShowName) ? "bg-warning" : show.IsWanted ? "bg-success" : "bg-secondary";
+                            <tr>
+                                <td class="text-truncate" style="max-width:200px;" title="@show.FolderName">@show.FolderName</td>
+                                <td>
+                                    @if (show.ShowId > 0)
+                                    {
+                                        <a href="/showlist/show/@show.ShowId">@show.ShowName</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted fst-italic">unmatched</span>
+                                    }
+                                </td>
+                                <td class="text-end text-nowrap">@show.SizeFormatted</td>
+                                <td class="text-end">@show.FileCount</td>
+                                <td class="text-end">@show.SeasonCount</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(show.Status))
+                                    {
+                                        var statusClass = show.Status.ToLower() switch
+                                        {
+                                            "running" => "bg-success",
+                                            "ended" => "bg-secondary",
+                                            "to be determined" => "bg-warning text-dark",
+                                            "in development" => "bg-info",
+                                            _ => "bg-light text-dark"
+                                        };
+                                        <span class="badge @statusClass">@show.Status</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 10px;">
+                                        <div class="progress-bar @barClass" style="width: @pct%"></div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private StorageDashboardModel? model;
+    private string filterMode = "all";
+    private string sortMode = "size";
+    private long maxSize;
+
+    private IEnumerable<ShowStorageInfo> FilteredShows
+    {
+        get
+        {
+            if (model == null) return Enumerable.Empty<ShowStorageInfo>();
+
+            var shows = filterMode switch
+            {
+                "matched" => model.Shows.Where(s => s.ShowId > 0),
+                "unmatched" => model.Shows.Where(s => s.ShowId == 0),
+                "wanted" => model.Shows.Where(s => s.IsWanted),
+                "notwanted" => model.Shows.Where(s => s.ShowId > 0 && !s.IsWanted),
+                _ => model.Shows.AsEnumerable()
+            };
+
+            shows = sortMode switch
+            {
+                "name" => shows.OrderBy(s => s.FolderName),
+                "files" => shows.OrderByDescending(s => s.FileCount),
+                "smallest" => shows.OrderBy(s => s.SizeBytes),
+                _ => shows.OrderByDescending(s => s.SizeBytes)
+            };
+
+            return shows;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        model = AppService.GetStorageDashboard();
+        if (model.Shows.Any())
+            maxSize = model.Shows.Max(s => s.SizeBytes);
+    }
+
+    private string FormatSize(long bytes)
+    {
+        if (bytes >= 1_099_511_627_776) return $"{bytes / 1_099_511_627_776.0:F1} TB";
+        if (bytes >= 1_073_741_824) return $"{bytes / 1_073_741_824.0:F1} GB";
+        if (bytes >= 1_048_576) return $"{bytes / 1_048_576.0:F1} MB";
+        return $"{bytes / 1024.0:F1} KB";
+    }
+}

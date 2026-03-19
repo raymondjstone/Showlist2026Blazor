@@ -2237,6 +2237,91 @@ namespace Showlist2026.Services
             return sb.ToString();
         }
 
+        public StorageDashboardModel GetStorageDashboard()
+        {
+            var model = new StorageDashboardModel();
+            var basePath = _options.ShowFolderBasePath;
+
+            if (!Directory.Exists(basePath))
+                return model;
+
+            // Build folder -> show lookup
+            var allShows = _db.Shows.ToList();
+            var wantedShowIds = _db.UserShowSelections
+                .Include(s => s.show)
+                .Where(s => s.include)
+                .Select(s => s.show.Id)
+                .ToHashSet();
+
+            var folderToShow = new Dictionary<string, Show>(StringComparer.OrdinalIgnoreCase);
+            foreach (var show in allShows)
+            {
+                var folder = show.FolderName;
+                if (string.IsNullOrEmpty(folder))
+                    folder = show.DefaultFolderName;
+                if (!string.IsNullOrEmpty(folder) && !folderToShow.ContainsKey(folder))
+                    folderToShow[folder] = show;
+            }
+
+            var dirs = Directory.GetDirectories(basePath);
+            model.TotalFolders = dirs.Length;
+
+            foreach (var dir in dirs)
+            {
+                var folderName = Path.GetFileName(dir);
+                long size = 0;
+                int fileCount = 0;
+                int seasonCount = 0;
+
+                try
+                {
+                    var files = Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories);
+                    foreach (var f in files)
+                    {
+                        var fi = new FileInfo(f);
+                        size += fi.Length;
+                        fileCount++;
+                    }
+                    seasonCount = Directory.GetDirectories(dir).Length;
+                }
+                catch { continue; }
+
+                model.TotalSizeBytes += size;
+
+                if (folderToShow.TryGetValue(folderName, out var show))
+                {
+                    model.MatchedFolders++;
+                    model.Shows.Add(new ShowStorageInfo
+                    {
+                        ShowId = show.Id,
+                        ShowName = show.name ?? folderName,
+                        FolderName = folderName,
+                        SizeBytes = size,
+                        FileCount = fileCount,
+                        SeasonCount = seasonCount,
+                        Status = show.status ?? "",
+                        IsWanted = wantedShowIds.Contains(show.Id)
+                    });
+                }
+                else
+                {
+                    model.UnmatchedFolders++;
+                    model.UnmatchedFolderNames.Add(folderName);
+                    model.Shows.Add(new ShowStorageInfo
+                    {
+                        FolderName = folderName,
+                        SizeBytes = size,
+                        FileCount = fileCount,
+                        SeasonCount = seasonCount
+                    });
+                }
+            }
+
+            model.Shows = model.Shows.OrderByDescending(s => s.SizeBytes).ToList();
+            model.UnmatchedFolderNames.Sort();
+            return model;
+        }
+
         public async Task<(int showsMatched, int episodesMarked, int linesSkipped, List<string> unmatchedFolders)> ImportWatchedFromPaths(string fileContent)
         {
             var lines = fileContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);

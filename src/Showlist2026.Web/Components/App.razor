@@ -111,40 +111,105 @@
         })();
     </script>
     <script>
-        // Initialize Bootstrap popovers - manual trigger with click-to-dismiss
-        function initPopovers() {
-            document.querySelectorAll('.popover').forEach(function (p) { p.remove(); });
-            document.querySelectorAll('[data-popover-init]').forEach(function (el) {
-                var existing = bootstrap.Popover.getInstance(el);
-                if (existing) existing.dispose();
-                el.removeAttribute('data-popover-init');
-            });
-            document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
-                el.setAttribute('data-popover-init', '');
-                var pop = new bootstrap.Popover(el, { sanitize: false, container: 'body', trigger: 'manual' });
-                var showTimeout;
-                el.addEventListener('mouseenter', function () {
-                    showTimeout = setTimeout(function () { pop.show(); }, 300);
-                });
-                el.addEventListener('mouseleave', function () {
-                    clearTimeout(showTimeout);
-                });
-            });
-        }
-        // Click anywhere to dismiss all open popovers
-        document.addEventListener('click', function (e) {
-            if (!e.target.closest('.popover') && !e.target.closest('[data-bs-toggle="popover"]')) {
-                document.querySelectorAll('[data-popover-init]').forEach(function (el) {
-                    var p = bootstrap.Popover.getInstance(el);
-                    if (p) p.hide();
-                });
+        // Popover system using event delegation — no MutationObserver, no re-init loops
+        (function () {
+            var activePopover = null;
+            var activeTrigger = null;
+            var hideTimer = null;
+            var showTimer = null;
+
+            function clearTimers() {
+                clearTimeout(hideTimer);
+                clearTimeout(showTimer);
             }
-        });
-        initPopovers();
-        new MutationObserver(function () {
-            clearTimeout(window._popoverTimeout);
-            window._popoverTimeout = setTimeout(initPopovers, 200);
-        }).observe(document.body, { childList: true, subtree: true });
+
+            function hideActive() {
+                clearTimers();
+                if (activePopover) {
+                    activePopover.hide();
+                    activePopover.dispose();
+                    activePopover = null;
+                    activeTrigger = null;
+                }
+            }
+
+            function scheduleHide() {
+                clearTimeout(hideTimer);
+                hideTimer = setTimeout(hideActive, 400);
+            }
+
+            // Delegate mouseenter on popover trigger elements
+            document.addEventListener('mouseover', function (e) {
+                var trigger = e.target.closest('[data-bs-toggle="popover"]');
+                if (!trigger) return;
+
+                // Already showing for this trigger
+                if (trigger === activeTrigger) {
+                    clearTimers();
+                    return;
+                }
+
+                clearTimers();
+
+                // Hide any existing popover immediately
+                if (activePopover) {
+                    activePopover.hide();
+                    activePopover.dispose();
+                    activePopover = null;
+                    activeTrigger = null;
+                }
+
+                showTimer = setTimeout(function () {
+                    if (!document.body.contains(trigger)) return;
+                    activeTrigger = trigger;
+                    activePopover = new bootstrap.Popover(trigger, {
+                        sanitize: false,
+                        container: 'body',
+                        trigger: 'manual',
+                        html: true
+                    });
+                    activePopover.show();
+                }, 300);
+            });
+
+            // Delegate mouseleave — schedule hide
+            document.addEventListener('mouseout', function (e) {
+                var trigger = e.target.closest('[data-bs-toggle="popover"]');
+                if (trigger && trigger === activeTrigger) {
+                    // Check if moving to the popover tip
+                    var related = e.relatedTarget;
+                    if (related && related.closest('.popover')) return;
+                    scheduleHide();
+                }
+            });
+
+            // Keep popover alive while hovering over it
+            document.addEventListener('mouseover', function (e) {
+                if (e.target.closest('.popover') && activePopover) {
+                    clearTimers();
+                }
+            });
+
+            document.addEventListener('mouseout', function (e) {
+                if (e.target.closest('.popover')) {
+                    var related = e.relatedTarget;
+                    if (related && (related.closest('.popover') || related === activeTrigger || (activeTrigger && activeTrigger.contains(related)))) return;
+                    scheduleHide();
+                }
+            });
+
+            // Dismiss on click outside
+            document.addEventListener('click', function (e) {
+                if (!e.target.closest('.popover') && !e.target.closest('[data-bs-toggle="popover"]')) {
+                    hideActive();
+                }
+            });
+
+            // Clean up on Blazor navigation
+            document.addEventListener('blazor:enhancedload', function () {
+                hideActive();
+            });
+        })();
     </script>
     <script>
         if ('serviceWorker' in navigator) {

@@ -93,6 +93,9 @@ namespace Showlist2026.Services
         // CSV export
         string ExportUserDataAsCsv();
 
+        // Storage dashboard
+        StorageDashboardModel GetStorageDashboard();
+
         // Import watched shows from file path list
         Task<(int showsMatched, int episodesMarked, int linesSkipped, List<string> unmatchedFolders)> ImportWatchedFromPaths(string fileContent);
     }

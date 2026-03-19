@@ -264,7 +264,7 @@ namespace Showlist2026.Services
         }
 
         [Serializable]
-        public class jobparams
+        public class Jobparams
         {
             public int Pageno { get; set; }
         }
@@ -321,14 +321,15 @@ namespace Showlist2026.Services
 
             while (pagenofrom <= pagenoto)
             {
-                List<TVMazeShowData> shows = new List<TVMazeShowData>();
+                List<TVMazeShowData> shows;
                 try
                 {
                     shows = await ($"{_options.TvMazeBaseUrl}/shows?page=" + pagenofrom.ToString())
                         .GetJsonAsync<List<TVMazeShowData>>();
                 }
-                catch (FlurlHttpException e)
+                catch 
                 {
+                    shows = [];
                     //return false;
                 }
 
@@ -659,8 +660,9 @@ namespace Showlist2026.Services
                         su = await ($"{_options.TvMazeBaseUrl}/shows/" + s.showid.ToString())
                             .GetJsonAsync<TVMazeShowData>();
                     }
-                    catch (Exception e)
+                    catch 
                     {
+                        su = null;
                         //return false;
                     }
 
