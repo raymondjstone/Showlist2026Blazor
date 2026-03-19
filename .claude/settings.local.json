@@ -15,7 +15,8 @@
       "Bash(do echo:*)",
       "Bash(git show:*)",
       "Bash(done)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth status 2>&1)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth status 2>&1)",
+      "Bash(taskkill //F //IM Showlist2026.Web.exe)"
     ]
   }
 }

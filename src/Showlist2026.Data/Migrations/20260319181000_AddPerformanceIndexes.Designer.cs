@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Showlist2026.Data;
 
@@ -11,9 +12,11 @@ using Showlist2026.Data;
 namespace Showlist2026.Data.Migrations
 {
     [DbContext(typeof(ShowlistDbContext))]
-    partial class ShowlistDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260319181000_AddPerformanceIndexes")]
+    partial class AddPerformanceIndexes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -38,7 +41,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Country", (string)null);
+                    b.ToTable("Country");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.Episode", b =>
@@ -92,7 +95,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("showId");
 
-                    b.ToTable("Episode", (string)null);
+                    b.ToTable("Episode");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.Genre", b =>
@@ -115,7 +118,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("showId");
 
-                    b.ToTable("Genre", (string)null);
+                    b.ToTable("Genre");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.GenreText", b =>
@@ -131,7 +134,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("GenreText", (string)null);
+                    b.ToTable("GenreText");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.Language", b =>
@@ -147,7 +150,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Language", (string)null);
+                    b.ToTable("Language");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.Network", b =>
@@ -179,7 +182,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("tzId");
 
-                    b.ToTable("Network", (string)null);
+                    b.ToTable("Network");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.Show", b =>
@@ -274,7 +277,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("WebNetworksId");
 
-                    b.ToTable("Show", (string)null);
+                    b.ToTable("Show");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.ShowUpdated", b =>
@@ -299,7 +302,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ShowUpdated", (string)null);
+                    b.ToTable("ShowUpdated");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.TVDirectories", b =>
@@ -324,7 +327,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TVDirectories", (string)null);
+                    b.ToTable("TVDirectories");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.TVSite", b =>
@@ -349,7 +352,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TVSites", (string)null);
+                    b.ToTable("TVSites");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.Timezone", b =>
@@ -377,7 +380,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Timezone", (string)null);
+                    b.ToTable("Timezone");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.TouchFile", b =>
@@ -404,7 +407,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("EpisodeId");
 
-                    b.ToTable("Touchfile", (string)null);
+                    b.ToTable("Touchfile");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.TouchFolder", b =>
@@ -423,7 +426,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Touchfolder", (string)null);
+                    b.ToTable("Touchfolder");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.Type", b =>
@@ -439,7 +442,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Type", (string)null);
+                    b.ToTable("Type");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.UserCountrySelection", b =>
@@ -460,7 +463,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("countryId");
 
-                    b.ToTable("UserCountrySelection", (string)null);
+                    b.ToTable("UserCountrySelection");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.UserGenreSelection", b =>
@@ -481,7 +484,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("genretextId");
 
-                    b.ToTable("UserGenreSelection", (string)null);
+                    b.ToTable("UserGenreSelection");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.UserLanguageSelection", b =>
@@ -502,7 +505,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("languageId");
 
-                    b.ToTable("UserLanguageSelection", (string)null);
+                    b.ToTable("UserLanguageSelection");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.UserNetworkSelection", b =>
@@ -523,7 +526,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("networkId");
 
-                    b.ToTable("UserNetworkSelection", (string)null);
+                    b.ToTable("UserNetworkSelection");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.UserShowSelection", b =>
@@ -547,7 +550,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("showId");
 
-                    b.ToTable("UserShowSelection", (string)null);
+                    b.ToTable("UserShowSelection");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.UserTypeSelection", b =>
@@ -568,7 +571,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("typeId");
 
-                    b.ToTable("UserTypeSelection", (string)null);
+                    b.ToTable("UserTypeSelection");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.UserWatchedSelection", b =>
@@ -586,7 +589,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("episodeId");
 
-                    b.ToTable("UserWatchedSelection", (string)null);
+                    b.ToTable("UserWatchedSelection");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.UserWebNetworkSelection", b =>
@@ -607,7 +610,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("webnetworkId");
 
-                    b.ToTable("UserWebNetworkSelection", (string)null);
+                    b.ToTable("UserWebNetworkSelection");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.WatchedHistory", b =>
@@ -628,7 +631,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("episodeId");
 
-                    b.ToTable("WatchedHistory", (string)null);
+                    b.ToTable("WatchedHistory");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.WebNetwork", b =>
@@ -660,7 +663,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasIndex("tzId");
 
-                    b.ToTable("WebNetwork", (string)null);
+                    b.ToTable("WebNetwork");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.Episode", b =>

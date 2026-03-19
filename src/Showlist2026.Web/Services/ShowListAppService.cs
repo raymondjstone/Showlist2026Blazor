@@ -1736,13 +1736,16 @@ namespace Showlist2026.Services
             }
         }
 
-        public List<Show> AdvancedSearch(string? name, int? genreId, int? networkId, int? year)
+        public List<Show> AdvancedSearch(string? name, int? genreId, int? networkId, int? year,
+            string? status = null, int? typeId = null, int? webNetworkId = null,
+            int? languageId = null, int? countryId = null, string? wanted = null)
         {
             IQueryable<Show> query = _db.Shows
-                .Include(s => s.Networks)
-                .Include(s => s.WebNetworks)
+                .Include(s => s.Networks).ThenInclude(n => n.country)
+                .Include(s => s.WebNetworks).ThenInclude(wn => wn.country)
                 .Include(s => s.Types)
-                .Include(s => s.Languages);
+                .Include(s => s.Languages)
+                .Include(s => s.UserShowSelections);
 
             if (!string.IsNullOrWhiteSpace(name))
             {
@@ -1756,9 +1759,24 @@ namespace Showlist2026.Services
 
             if (networkId.HasValue)
             {
+                query = query.Where(s => s.Networks != null && s.Networks.Id == networkId.Value);
+            }
+
+            if (webNetworkId.HasValue)
+            {
+                query = query.Where(s => s.WebNetworks != null && s.WebNetworks.Id == webNetworkId.Value);
+            }
+
+            if (languageId.HasValue)
+            {
+                query = query.Where(s => s.Languages != null && s.Languages.Id == languageId.Value);
+            }
+
+            if (countryId.HasValue)
+            {
                 query = query.Where(s =>
-                    (s.Networks != null && s.Networks.Id == networkId.Value) ||
-                    (s.WebNetworks != null && s.WebNetworks.Id == networkId.Value));
+                    (s.Networks != null && s.Networks.country != null && s.Networks.country.Id == countryId.Value) ||
+                    (s.WebNetworks != null && s.WebNetworks.country != null && s.WebNetworks.country.Id == countryId.Value));
             }
 
             if (year.HasValue)
@@ -1767,7 +1785,15 @@ namespace Showlist2026.Services
                 query = query.Where(s => s.premiered != null && s.premiered.Contains(yearStr));
             }
 
-            var results = query.OrderBy(s => s.name).Take(200).ToList();
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query = query.Where(s => s.status == status);
+            }
+
+            if (typeId.HasValue)
+            {
+                query = query.Where(s => s.Types != null && s.Types.Id == typeId.Value);
+            }
 
             if (genreId.HasValue)
             {
@@ -1776,10 +1802,29 @@ namespace Showlist2026.Services
                     .Select(g => g.show.Id)
                     .ToHashSet();
 
-                results = results.Where(s => showIdsWithGenre.Contains(s.Id)).ToList();
+                query = query.Where(s => showIdsWithGenre.Contains(s.Id));
             }
 
-            return results;
+            if (!string.IsNullOrWhiteSpace(wanted))
+            {
+                switch (wanted)
+                {
+                    case "wanted":
+                        query = query.Where(s => s.UserShowSelections != null &&
+                            s.UserShowSelections.Any(u => u.include));
+                        break;
+                    case "excluded":
+                        query = query.Where(s => s.UserShowSelections != null &&
+                            s.UserShowSelections.Any(u => !u.include));
+                        break;
+                    case "undecided":
+                        query = query.Where(s => s.UserShowSelections == null ||
+                            !s.UserShowSelections.Any());
+                        break;
+                }
+            }
+
+            return query.OrderBy(s => s.name).ToList();
         }
 
         // ===== Feature 4: Bulk actions =====

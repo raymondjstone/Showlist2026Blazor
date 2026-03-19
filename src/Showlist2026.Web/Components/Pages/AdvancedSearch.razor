@@ -9,10 +9,10 @@
 
     <div class="card mb-3">
         <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-4">
+            <div class="row g-2 mb-2">
+                <div class="col-md-3">
                     <label class="form-label">Show Name</label>
-                    <input type="text" class="form-control" @bind="searchName" />
+                    <input type="text" class="form-control" @bind="searchName" placeholder="Optional" />
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Genre</label>
@@ -41,12 +41,88 @@
                     </select>
                 </div>
                 <div class="col-md-2">
+                    <label class="form-label">Web Network</label>
+                    <select class="form-select" @bind="searchWebNetworkId">
+                        <option value="">All</option>
+                        @if (webNetworks != null)
+                        {
+                            @foreach (var wn in webNetworks.Where(n => !string.IsNullOrEmpty(n.name)))
+                            {
+                                <option value="@wn.Id">@wn.name</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Language</label>
+                    <select class="form-select" @bind="searchLanguageId">
+                        <option value="">All</option>
+                        @if (languages != null)
+                        {
+                            @foreach (var l in languages.Where(l => !string.IsNullOrEmpty(l.name)))
+                            {
+                                <option value="@l.Id">@l.name</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">Country</label>
+                    <select class="form-select" @bind="searchCountryId">
+                        <option value="">All</option>
+                        @if (countries != null)
+                        {
+                            @foreach (var c in countries.Where(c => !string.IsNullOrEmpty(c.name) && c.code != "??"))
+                            {
+                                <option value="@c.Id">@c.code - @c.name</option>
+                            }
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="row g-2">
+                <div class="col-md-2">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" @bind="searchStatus">
+                        <option value="">All</option>
+                        <option value="Running">Running</option>
+                        <option value="Ended">Ended</option>
+                        <option value="To Be Determined">TBD</option>
+                        <option value="In Development">In Dev</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Type</label>
+                    <select class="form-select" @bind="searchTypeId">
+                        <option value="">All</option>
+                        @if (types != null)
+                        {
+                            @foreach (var t in types)
+                            {
+                                <option value="@t.Id">@t.type</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-1">
                     <label class="form-label">Year</label>
                     <input type="number" class="form-control" @bind="searchYear" placeholder="e.g. 2025" />
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label">Wanted</label>
+                    <select class="form-select" @bind="searchWanted">
+                        <option value="">All</option>
+                        <option value="wanted">Wanted</option>
+                        <option value="excluded">Excluded</option>
+                        <option value="undecided">Undecided</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end gap-2">
                     <button class="btn btn-primary w-100" @onclick="SearchLocal">
                         <i class="fas fa-search"></i> Search
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="ClearFilters" title="Clear all filters">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
             </div>
@@ -72,32 +148,116 @@
 
     @if (localResults != null)
     {
-        <h5>Local Results (@localResults.Count)</h5>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Local Results (@localResults.Count)</h5>
+            @if (totalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => SetPage(currentPage - 1)">&laquo;</button>
+                        </li>
+                        @for (int i = pageRangeStart; i <= pageRangeEnd; i++)
+                        {
+                            var p = i;
+                            <li class="page-item @(p == currentPage ? "active" : "")">
+                                <button class="page-link" @onclick="() => SetPage(p)">@p</button>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => SetPage(currentPage + 1)">&raquo;</button>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        </div>
         <div class="table-responsive">
             <table class="table table-sm table-striped">
                 <thead>
                     <tr>
                         <th>Name</th>
                         <th>Type</th>
+                        <th>Language</th>
                         <th>Status</th>
                         <th>Network</th>
+                        <th>Country</th>
                         <th>Premiered</th>
+                        <th>Wanted</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var show in localResults)
+                    @foreach (var show in pagedResults)
                     {
+                        var sel = show.UserShowSelections?.FirstOrDefault();
+                        var wantedBadge = sel == null ? ("bg-secondary", "Undecided") :
+                                          sel.include ? ("bg-success", "Wanted") : ("bg-danger", "Excluded");
                         <tr>
-                            <td><a href="/showlist/show/@show.Id">@show.name</a></td>
+                            <td>
+                                <a href="/showlist/show/@show.Id" target="_blank"
+                                   data-bs-toggle="popover" data-bs-html="true" data-bs-content="@show.summarycleanwithimage">
+                                    @show.name
+                                </a>
+                            </td>
                             <td>@show.Types?.type</td>
-                            <td>@show.status</td>
-                            <td>@(show.Networks?.name ?? show.WebNetworks?.name)</td>
+                            <td>@show.Languages?.name</td>
+                            <td>
+                                @{
+                                    var statusClass = show.status?.ToLower() switch
+                                    {
+                                        "running" => "bg-success",
+                                        "ended" => "bg-secondary",
+                                        "to be determined" => "bg-warning text-dark",
+                                        "in development" => "bg-info",
+                                        _ => "bg-light text-dark"
+                                    };
+                                }
+                                <span class="badge @statusClass">@show.status</span>
+                            </td>
+                            <td>
+                                @if (show.Networks != null && !string.IsNullOrEmpty(show.Networks.name))
+                                {
+                                    @show.Networks.name
+                                }
+                                @if (show.WebNetworks != null && !string.IsNullOrEmpty(show.WebNetworks.name))
+                                {
+                                    @if (show.Networks != null && !string.IsNullOrEmpty(show.Networks.name))
+                                    {
+                                        <br />
+                                    }
+                                    @show.WebNetworks.name
+                                }
+                            </td>
+                            <td>@(show.Networks?.country?.code ?? show.WebNetworks?.country?.code)</td>
                             <td>@show.premiered</td>
+                            <td><span class="badge @wantedBadge.Item1">@wantedBadge.Item2</span></td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
+        @if (totalPages > 1)
+        {
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="text-muted small">Page @currentPage of @totalPages</span>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => SetPage(currentPage - 1)">&laquo;</button>
+                        </li>
+                        @for (int i = pageRangeStart; i <= pageRangeEnd; i++)
+                        {
+                            var p = i;
+                            <li class="page-item @(p == currentPage ? "active" : "")">
+                                <button class="page-link" @onclick="() => SetPage(p)">@p</button>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => SetPage(currentPage + 1)">&raquo;</button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
     }
 
     @if (tvMazeResults != null)
@@ -130,7 +290,7 @@
                             <td>
                                 @if (inDb)
                                 {
-                                    <a href="/showlist/show/@localShowIdMap[result.Show.Id]">@result.Show.Name</a>
+                                    <a href="/showlist/show/@localShowIdMap[result.Show.Id]" target="_blank">@result.Show.Name</a>
                                 }
                                 else
                                 {
@@ -163,6 +323,12 @@
     private string? searchName;
     private string? searchGenreId;
     private string? searchNetworkId;
+    private string? searchWebNetworkId;
+    private string? searchLanguageId;
+    private string? searchCountryId;
+    private string? searchStatus;
+    private string? searchTypeId;
+    private string? searchWanted;
     private int? searchYear;
     private string? tvMazeQuery;
     private bool searching;
@@ -174,11 +340,26 @@
 
     private List<GenreText>? genres;
     private List<Network>? networks;
+    private List<WebNetwork>? webNetworks;
+    private List<Language>? languages;
+    private List<Country>? countries;
+    private List<Showlist2026.Entities.Type>? types;
+
+    private const int pageSize = 50;
+    private int currentPage = 1;
+    private int totalPages => localResults == null ? 0 : (int)Math.Ceiling(localResults.Count / (double)pageSize);
+    private int pageRangeStart => Math.Max(1, currentPage - 4);
+    private int pageRangeEnd => Math.Min(totalPages, pageRangeStart + 9);
+    private List<Show> pagedResults => localResults?.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList() ?? new();
 
     protected override void OnInitialized()
     {
         genres = AppService.GenreData();
         networks = AppService.NetworkData();
+        webNetworks = AppService.WebNetworkData();
+        languages = AppService.LanguageData();
+        countries = AppService.CountryData();
+        types = AppService.TypeData();
 
         var shows = AppService.showlist("");
         localShowIdMap = shows.GroupBy(s => s.showid).ToDictionary(g => g.Key, g => g.First().Id);
@@ -189,8 +370,36 @@
     {
         int? genreId = string.IsNullOrEmpty(searchGenreId) ? null : int.Parse(searchGenreId);
         int? networkId = string.IsNullOrEmpty(searchNetworkId) ? null : int.Parse(searchNetworkId);
+        int? webNetworkId = string.IsNullOrEmpty(searchWebNetworkId) ? null : int.Parse(searchWebNetworkId);
+        int? languageId = string.IsNullOrEmpty(searchLanguageId) ? null : int.Parse(searchLanguageId);
+        int? countryId = string.IsNullOrEmpty(searchCountryId) ? null : int.Parse(searchCountryId);
+        int? typeId = string.IsNullOrEmpty(searchTypeId) ? null : int.Parse(searchTypeId);
 
-        localResults = AppService.AdvancedSearch(searchName, genreId, networkId, searchYear);
+        currentPage = 1;
+        localResults = AppService.AdvancedSearch(searchName, genreId, networkId, searchYear,
+            searchStatus, typeId, webNetworkId, languageId, countryId, searchWanted);
+    }
+
+    private void ClearFilters()
+    {
+        searchName = null;
+        searchGenreId = null;
+        searchNetworkId = null;
+        searchWebNetworkId = null;
+        searchLanguageId = null;
+        searchCountryId = null;
+        searchStatus = null;
+        searchTypeId = null;
+        searchWanted = null;
+        searchYear = null;
+        localResults = null;
+        currentPage = 1;
+    }
+
+    private void SetPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+            currentPage = page;
     }
 
     private async Task SearchTvMaze()

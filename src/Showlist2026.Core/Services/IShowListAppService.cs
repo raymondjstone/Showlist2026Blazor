@@ -52,7 +52,9 @@ namespace Showlist2026.Services
 
         // Feature 3: Search improvements
         Task<List<TVMazeSearchResult>> SearchTvMaze(string query);
-        List<Show> AdvancedSearch(string? name, int? genreId, int? networkId, int? year);
+        List<Show> AdvancedSearch(string? name, int? genreId, int? networkId, int? year,
+            string? status = null, int? typeId = null, int? webNetworkId = null,
+            int? languageId = null, int? countryId = null, string? wanted = null);
 
         // Feature 4: Bulk actions
         Task BulkSetShowFilter(List<long> showIds, bool? state);
