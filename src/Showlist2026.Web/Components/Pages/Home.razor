@@ -75,9 +75,9 @@ else
                                     <p class="card-text mb-1">
                                         @(ep.ep.EpNumberFormatted) - @ep.ep.name
                                     </p>
-                                    @if (ep.ep.AiringTime != null)
+                                    @if (ep.ep.AirDateOffset2 != null)
                                     {
-                                        <small class="text-muted">@(((DateTimeOffset)ep.ep.AiringTime).ToLocalTime().ToString("h:mm tt"))</small>
+                                        <small class="text-muted">@(ep.ep.AiringTime.ToLocalTime().ToString("h:mm tt"))</small>
                                     }
                                     @if (ep.ep.show.Networks != null)
                                     {

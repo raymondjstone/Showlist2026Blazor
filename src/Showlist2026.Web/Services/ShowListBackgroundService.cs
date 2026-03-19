@@ -1299,7 +1299,6 @@ namespace Showlist2026.Services
                 .ToList()
                 .Where(a => a.Episode is null);
 
-            int filenum = 0;
             foreach (var f in filesToScan)
             {
             }

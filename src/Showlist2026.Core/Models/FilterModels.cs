@@ -66,7 +66,7 @@ namespace Showlist2026.Models
                 {
                     return new FilterButtonsModel("show", showinclude, ep.Id);
                 }
-                catch (Exception e)
+                catch
                 {
                     return null;
                 }
@@ -212,7 +212,7 @@ namespace Showlist2026.Models
                 {
                     return new FilterButtonsModel("show", showinclude, ep.show.Id);
                 }
-                catch (Exception e)
+                catch
                 {
                     return null;
                 }

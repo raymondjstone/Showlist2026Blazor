@@ -168,7 +168,7 @@ else
         {
             int.TryParse(newDir.DaysToScan, out int days);
             int.TryParse(newDir.MinFileSize, out int minSize);
-            AppService.TVDirectoryUpdate(-1, newDir.Name, days, newDir.Filter, minSize);
+            await AppService.TVDirectoryUpdate(-1, newDir.Name, days, newDir.Filter, minSize);
             statusMessage = $"Added: {newDir.Name}";
             newDir = new DirEditState { Name = "", DaysToScan = "7", Filter = "*.*", MinFileSize = "50000" };
             await LoadData();

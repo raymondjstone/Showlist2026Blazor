@@ -146,9 +146,9 @@ else
             </div>
             <div class="row bg-light d-none d-md-flex">
                 <div class="col-1">
-                    @if (nextEpisode.AiringTime != null)
+                    @if (nextEpisode.AirDateOffset2 != null)
                     {
-                        @(((DateTimeOffset)nextEpisode.AiringTime).Date.ToString("dd MMM yyyy"))
+                        @(nextEpisode.AiringTime.Date.ToString("dd MMM yyyy"))
                     }
                 </div>
                 <div class="col-1">
@@ -170,9 +170,9 @@ else
                     <span>@nextEpisode.nameclean</span>
                 </div>
                 <div class="text-muted small">
-                    @if (nextEpisode.AiringTime != null)
+                    @if (nextEpisode.AirDateOffset2 != null)
                     {
-                        @(((DateTimeOffset)nextEpisode.AiringTime).Date.ToString("dd MMM yyyy"))
+                        @(nextEpisode.AiringTime.Date.ToString("dd MMM yyyy"))
                     }
                 </div>
             </div>
