@@ -1,15 +1,16 @@
 @if (Episodes != null && Episodes.Any())
 {
     <div id="@("S" + Episodes.First().season)" role="tabpanel">
-        <div class="row"></div>
-        <div class="row fw-bold">
+        @* ── Desktop header (hidden on mobile) ── *@
+        <div class="row d-none d-md-flex"></div>
+        <div class="row fw-bold d-none d-md-flex">
             <div class="col-1">Date</div>
             <div class="col-1">Episode</div>
             <div class="col-3">Name</div>
             <div class="col-7">Summary</div>
         </div>
 
-        <div class="row">
+        <div class="row d-none d-md-flex">
             <div class="col-1"></div>
             <div class="col-1">
                 <i class="fas fa-tasks" title="Mark season as watched" role="button"
@@ -20,9 +21,17 @@
             <div class="col-7"></div>
         </div>
 
+        @* ── Mobile: mark season button ── *@
+        <div class="d-md-none mb-2">
+            <button class="btn btn-outline-primary btn-sm" @onclick="() => OnSeasonWatchedChanged.InvokeAsync((Episodes.First().show.Id, Episodes.First().season ?? 0, true))">
+                <i class="fas fa-tasks"></i> Mark season as watched
+            </button>
+        </div>
+
         @foreach (var ep in Episodes)
         {
-            <div class="row">
+            @* ── Desktop row (hidden on mobile) ── *@
+            <div class="row d-none d-md-flex">
                 <div class="col-1">
                     @if (ep.AirDateOffset2 != null)
                     {
@@ -49,6 +58,30 @@
                 </div>
                 <div class="col-7">
                     @((MarkupString)ep.summaryclean)
+                </div>
+            </div>
+
+            @* ── Mobile card (hidden on desktop) ── *@
+            <div class="d-md-none card card-body p-2 mb-1">
+                <div class="d-flex align-items-center gap-2">
+                    @if (ep.UserWatchedSelections == null || ep.UserWatchedSelections.Count == 0)
+                    {
+                        <i class="far fa-eye" title="Mark as watched" role="button"
+                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, true))"></i>
+                    }
+                    else
+                    {
+                        <i class="fas fa-trash-restore" title="Mark as NOT watched" role="button"
+                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, false))"></i>
+                    }
+                    <span class="fw-semibold">@ep.EpNumberFormatted</span>
+                    <span>@ep.name</span>
+                </div>
+                <div class="text-muted small">
+                    @if (ep.AirDateOffset2 != null)
+                    {
+                        @(((DateTimeOffset)ep.AiringTime).Date.ToString("dd MMM yyyy"))
+                    }
                 </div>
             </div>
         }

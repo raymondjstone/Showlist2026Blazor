@@ -137,13 +137,14 @@ else
             <div class="row">
                 <div class="col-6"><b>Next Episode</b></div>
             </div>
-            <div class="row fw-bold">
+            @* ── Desktop next episode (hidden on mobile) ── *@
+            <div class="row fw-bold d-none d-md-flex">
                 <div class="col-1">Date</div>
                 <div class="col-1">Episode</div>
                 <div class="col-3">Name</div>
                 <div class="col-7">Summary</div>
             </div>
-            <div class="row bg-light">
+            <div class="row bg-light d-none d-md-flex">
                 <div class="col-1">
                     @if (nextEpisode.AiringTime != null)
                     {
@@ -158,6 +159,22 @@ else
                 </div>
                 <div class="col-3">@nextEpisode.nameclean</div>
                 <div class="col-7">@((MarkupString)nextEpisode.summaryclean)</div>
+            </div>
+
+            @* ── Mobile next episode (hidden on desktop) ── *@
+            <div class="d-md-none card card-body p-2 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="far fa-eye" title="Mark as watched" role="button"
+                       @onclick="() => HandleWatchedChanged((nextEpisode.Id, true))"></i>
+                    <span class="fw-semibold">@nextEpisode.EpNumberFormatted</span>
+                    <span>@nextEpisode.nameclean</span>
+                </div>
+                <div class="text-muted small">
+                    @if (nextEpisode.AiringTime != null)
+                    {
+                        @(((DateTimeOffset)nextEpisode.AiringTime).Date.ToString("dd MMM yyyy"))
+                    }
+                </div>
             </div>
             <br />
         }

@@ -47,8 +47,9 @@ else
                 @if (activeTab == tab._TabId)
                 {
                     <div class="tab-pane fade show active" role="tabpanel">
-                        <div class="row"></div>
-                        <div class="row fw-bold align-items-center">
+                        @* ── Desktop header (hidden on mobile) ── *@
+                        <div class="row d-none d-md-flex"></div>
+                        <div class="row fw-bold align-items-center d-none d-md-flex">
                             <div class="col-1">Behind</div>
                             <div class="col-2">Show</div>
                             <div class="col-1">Progress</div>
@@ -63,7 +64,9 @@ else
                         @foreach (var ep in tab._EpisodeList)
                         {
                             var idx = rowIndex;
-                            <div class="row align-items-center @(selectedIndex == idx && activeTab == tab._TabId ? "episode-row-selected" : "")" id="unwatched-row-@idx">
+
+                            @* ── Desktop row (hidden on mobile) ── *@
+                            <div class="row align-items-center d-none d-md-flex @(selectedIndex == idx && activeTab == tab._TabId ? "episode-row-selected" : "")" id="unwatched-row-@idx">
                                 <div class="col-1">
                                     @{
                                         var badgeClass = ep.EpisodesBehind > 20 ? "bg-danger" :
@@ -145,6 +148,60 @@ else
                                 </div>
                                 <div class="col-1">
                                     <button class="btn btn-outline-success btn-sm" title="Catch up (mark all aired as watched)"
+                                            @onclick="() => CatchUpShow(ep.ep.show.Id)">
+                                        <i class="fas fa-forward"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            @* ── Mobile card (hidden on desktop) ── *@
+                            <div class="d-md-none card card-body p-2 mb-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center gap-1 mb-1">
+                                            @{
+                                                var mBadgeClass = ep.EpisodesBehind > 20 ? "bg-danger" :
+                                                                  ep.EpisodesBehind > 5 ? "bg-warning text-dark" :
+                                                                  ep.EpisodesBehind > 1 ? "bg-info" : "bg-success";
+                                            }
+                                            <span class="badge @mBadgeClass">@ep.EpisodesBehind eps</span>
+                                            <a href="/showlist/show/@ep.ep.show.Id" target="_blank" class="fw-bold">
+                                                @ep.ep.show.name
+                                            </a>
+                                            @{
+                                                var mStatusClass = ep.ep.show.status?.ToLower() switch
+                                                {
+                                                    "running" => "bg-success",
+                                                    "ended" => "bg-secondary",
+                                                    "to be determined" => "bg-warning text-dark",
+                                                    "in development" => "bg-info",
+                                                    _ => "bg-light text-dark"
+                                                };
+                                            }
+                                            <span class="badge @mStatusClass" style="font-size:0.65rem;">@ep.ep.show.status</span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2 small">
+                                            <i class="far fa-eye" title="Mark as watched" role="button"
+                                               @onclick="() => HandleWatchedChanged((ep.ep.Id, true))"></i>
+                                            <span class="fw-semibold">@ep.ep.EpNumberFormatted</span>
+                                            <span class="text-muted">@ep.ep.name</span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2 small mt-1">
+                                            @if (ep.TotalAiredEpisodes > 0)
+                                            {
+                                                var mPct = ep.TotalAiredEpisodes > 0 ? (int)(100.0 * ep.TotalWatchedEpisodes / ep.TotalAiredEpisodes) : 0;
+                                                <div class="progress progress-thin flex-grow-1" style="max-width:120px;" title="@ep.TotalWatchedEpisodes / @ep.TotalAiredEpisodes watched">
+                                                    <div class="progress-bar bg-success" style="width: @(mPct)%"></div>
+                                                </div>
+                                                <small class="text-muted text-nowrap">@ep.TotalWatchedEpisodes/@ep.TotalAiredEpisodes</small>
+                                            }
+                                            @if (ep.ep.show.Networks != null && !string.IsNullOrEmpty(ep.ep.show.Networks.name))
+                                            {
+                                                <span class="text-muted">&middot; @ep.ep.show.Networks.name</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-outline-success btn-sm ms-2" title="Catch up"
                                             @onclick="() => CatchUpShow(ep.ep.show.Id)">
                                         <i class="fas fa-forward"></i>
                                     </button>

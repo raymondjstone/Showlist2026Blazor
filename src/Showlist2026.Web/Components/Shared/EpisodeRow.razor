@@ -1,6 +1,7 @@
 @if (Episode?.ep != null)
 {
-    <div class="row">
+    @* ── Desktop layout (hidden on mobile) ── *@
+    <div class="row d-none d-md-flex">
         <div class="col-1">
             @if (Episode.ep.AirDateOffset2 != null)
             {
@@ -114,6 +115,56 @@
                 <FilterButtons Model="@Episode.typeFilter" OnFilterChanged="OnFilterChanged" />
                 @Episode.ep.show.Types.type
             }
+        </div>
+    </div>
+
+    @* ── Mobile card layout (hidden on desktop) ── *@
+    <div class="d-md-none card card-body p-2 mb-2">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-1 mb-1">
+                    <FilterButtons Model="@Episode.showFilter" OnFilterChanged="OnFilterChanged" />
+                    <a href="/showlist/show/@Episode.ep.show.Id" target="_blank" class="fw-bold">
+                        @Episode.ep.show.name
+                    </a>
+                    @{
+                        var mobileStatusClass = Episode.ep.show.status?.ToLower() switch
+                        {
+                            "running" => "bg-success",
+                            "ended" => "bg-secondary",
+                            "to be determined" => "bg-warning text-dark",
+                            "in development" => "bg-info",
+                            _ => "bg-light text-dark"
+                        };
+                    }
+                    <span class="badge @mobileStatusClass ms-1" style="font-size:0.65rem;">@Episode.ep.show.status</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 small">
+                    <i class="far fa-eye" title="Mark as watched" role="button"
+                       @onclick="() => OnWatchedChanged.InvokeAsync((Episode.ep.Id, true))"></i>
+                    <span class="fw-semibold">@Episode.ep.EpNumberFormatted</span>
+                    <span class="text-muted">@Episode.ep.name</span>
+                </div>
+                <div class="text-muted small mt-1">
+                    @if (Episode.ep.AirDateOffset2 != null)
+                    {
+                        @(((DateTimeOffset)Episode.ep.AiringTime).LocalDateTime.Date.ToString("dd MMM yyyy"))
+                        <text> &middot; </text>
+                    }
+                    @if (Episode.ep.show.Networks != null && !string.IsNullOrEmpty(Episode.ep.show.Networks.name))
+                    {
+                        @Episode.ep.show.Networks.name
+                    }
+                    @if (Episode.ep.show.WebNetworks != null && !string.IsNullOrEmpty(Episode.ep.show.WebNetworks.name))
+                    {
+                        @if (Episode.ep.show.Networks != null && !string.IsNullOrEmpty(Episode.ep.show.Networks.name))
+                        {
+                            <text> / </text>
+                        }
+                        @Episode.ep.show.WebNetworks.name
+                    }
+                </div>
+            </div>
         </div>
     </div>
 }

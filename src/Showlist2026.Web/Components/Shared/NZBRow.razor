@@ -2,7 +2,8 @@
 
 @if (Item != null)
 {
-    <div class="row">
+    @* ── Desktop row (hidden on mobile) ── *@
+    <div class="row d-none d-md-flex">
         <div class="col-1">
             @Item.EpNumberFormatted
         </div>
@@ -19,6 +20,18 @@
         </div>
         <div class="col-3">
             @Item.Category
+        </div>
+    </div>
+
+    @* ── Mobile card (hidden on desktop) ── *@
+    <div class="d-md-none card card-body p-2 mb-1">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1" style="min-width:0;">
+                <a href="@Item.Link" target="_blank" class="text-truncate d-block">@Item.Title</a>
+                <div class="text-muted small">
+                    @Item.EpNumberFormatted &middot; @(Item.SizeAsNumberMBs)MB &middot; @Item.PubDate
+                </div>
+            </div>
         </div>
     </div>
 }
