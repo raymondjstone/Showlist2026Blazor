@@ -1736,16 +1736,13 @@ namespace Showlist2026.Services
             }
         }
 
-        public List<Show> AdvancedSearch(string? name, int? genreId, int? networkId, int? year,
+        public (List<Show> results, int totalCount) AdvancedSearch(string? name, int? genreId, int? networkId, int? year,
             string? status = null, int? typeId = null, int? webNetworkId = null,
-            int? languageId = null, int? countryId = null, string? wanted = null)
+            int? languageId = null, int? countryId = null, string? wanted = null,
+            int page = 1, int pageSize = 50)
         {
-            IQueryable<Show> query = _db.Shows
-                .Include(s => s.Networks).ThenInclude(n => n.country)
-                .Include(s => s.WebNetworks).ThenInclude(wn => wn.country)
-                .Include(s => s.Types)
-                .Include(s => s.Languages)
-                .Include(s => s.UserShowSelections);
+            // Build a lean filter query without Includes
+            IQueryable<Show> query = _db.Shows.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(name))
             {
@@ -1824,7 +1821,28 @@ namespace Showlist2026.Services
                 }
             }
 
-            return query.OrderBy(s => s.name).ToList();
+            // Get total count from lean query
+            var totalCount = query.Count();
+
+            // Now get just the page of IDs, then load full details for those IDs only
+            var pageIds = query
+                .OrderBy(s => s.name)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(s => s.Id)
+                .ToList();
+
+            var results = _db.Shows
+                .Include(s => s.Networks).ThenInclude(n => n.country)
+                .Include(s => s.WebNetworks).ThenInclude(wn => wn.country)
+                .Include(s => s.Types)
+                .Include(s => s.Languages)
+                .Include(s => s.UserShowSelections)
+                .Where(s => pageIds.Contains(s.Id))
+                .OrderBy(s => s.name)
+                .ToList();
+
+            return (results, totalCount);
         }
 
         // ===== Feature 4: Bulk actions =====
