@@ -1,5 +1,7 @@
 # Showlist2026
 
+> **Note:** This is a personal project built for a very specific use case by the author. It is part of a series of internal systems for managing media workflows and is tailored to the author's particular setup and preferences. While parts of it may be useful or adaptable for others, it is not designed as a general-purpose application and comes with no guarantees of suitability for other environments.
+
 A personal TV show tracker built with Blazor Server, EF Core, and the TVMaze API. Track shows, monitor downloads, get notifications for new episodes, and manage your watchlist.
 
 ## Requirements
@@ -80,6 +82,7 @@ Paths and URLs used by the application.
 | `Showlist:TvNameListPath` | Root folder where show name folders are scanned to match shows to folders | `C:\tvnamelist\` |
 | `Showlist:ShowFolderBasePath` | Base path where new show folders are created when you select a show as wanted | `F:\tv_name_list\` |
 | `Showlist:TvMazeBaseUrl` | TVMaze API base URL. Only change if using a proxy/mirror | `http://api.tvmaze.com` |
+| `Showlist:NzbPlanetApiKey` | API key for NZBPlanet NZB search | *(empty)* |
 
 **appsettings.json:**
 
@@ -87,7 +90,8 @@ Paths and URLs used by the application.
 "Showlist": {
   "TvNameListPath": "C:\\tvnamelist\\",
   "ShowFolderBasePath": "F:\\tv_name_list\\",
-  "TvMazeBaseUrl": "http://api.tvmaze.com"
+  "TvMazeBaseUrl": "http://api.tvmaze.com",
+  "NzbPlanetApiKey": ""
 }
 ```
 
@@ -96,6 +100,7 @@ Paths and URLs used by the application.
 ```bash
 dotnet user-secrets set "Showlist:TvNameListPath" "/mnt/media/tvnamelist/"
 dotnet user-secrets set "Showlist:ShowFolderBasePath" "/mnt/media/tv_name_list/"
+dotnet user-secrets set "Showlist:NzbPlanetApiKey" "your-api-key"
 ```
 
 ---
@@ -170,7 +175,8 @@ dotnet user-secrets set "Notifications:Email:Password" "your-app-password"
   "Showlist": {
     "TvNameListPath": "C:\\tvnamelist\\",
     "ShowFolderBasePath": "F:\\tv_name_list\\",
-    "TvMazeBaseUrl": "http://api.tvmaze.com"
+    "TvMazeBaseUrl": "http://api.tvmaze.com",
+    "NzbPlanetApiKey": ""
   },
   "Notifications": {
     "Pushover": {
@@ -204,22 +210,62 @@ dotnet user-secrets set "Notifications:Email:Password" "your-app-password"
 
 ---
 
+## Features
+
+### Core
+- **Show tracking** — search and add shows from TVMaze, mark as wanted/unwanted
+- **Episode tracking** — mark episodes as watched, track watch history
+- **Filters** — filter by show, genre, network, web network, country, language, type
+- **Notifications** — get notified via Pushover, Discord, or Email when new episodes air or new seasons start
+
+### Views
+- **Airing Now** — episodes airing around the current date for your selected shows
+- **Calendar** — week/month grid view of upcoming episodes with date picker navigation
+- **Missed** — episodes you may have missed
+- **Undecided** — new shows to accept or reject in bulk
+- **Unwatched** — next unwatched episode per show with progress bars
+- **Coming Soon** — new shows premiering soon
+- **Downloaded** — downloaded episode history from scanned directories
+- **Watch History** — chronological log of watched episodes
+
+### Analytics
+- **Statistics** — watch time, genre breakdown, most-watched shows, episodes per month
+- **Storage Dashboard** — disk usage per show folder, matched/unmatched folder detection, filtering and sorting
+- **Download Progress** — per-show download completion with missing episode lists
+- **Trending** — currently trending shows from TVMaze (respects your type and show filters)
+- **Compare** — side-by-side show comparison
+
+### Admin
+- **Data refresh** — refresh networks, shows, episodes, and folder names from TVMaze
+- **Export/Import** — JSON and CSV export of selections and watched history
+- **Import from paths** — import a text file of video file paths to bulk-mark shows as wanted and episodes as watched
+- **Duplicate detection** — find potential duplicate shows in the database
+- **Notification testing** — test each notification channel individually
+- **NZB site management** — configure search sites for NZB lookups
+- **TV directory management** — configure directories to scan for downloads
+
+---
+
 ## Pages
 
 | Route | Description |
 |-------|-------------|
-| `/` | Home - stats overview and background job status |
+| `/` | Home — stats overview, tonight's episodes, background job status |
 | `/airing` | Episodes airing around now for your selected shows |
-| `/calendar` | Monthly calendar view of upcoming episodes |
+| `/calendar` | Week/month calendar view of upcoming episodes |
 | `/missed` | Episodes you may have missed |
-| `/missed-shows` | Undecided shows - bulk accept or reject |
+| `/missed-shows` | Undecided shows — bulk accept or reject |
 | `/unwatched` | Next unwatched episode per show |
 | `/coming-soon` | New shows premiering soon |
 | `/downloaded` | Downloaded episode history |
 | `/download-progress` | Per-show download completion with missing episode lists |
 | `/no-folder` | Selected shows without a matched folder |
-| `/stats` | Watch statistics - genres, trends, watch time |
+| `/watched-history` | Chronological watch history |
+| `/stats` | Watch statistics — genres, trends, watch time |
+| `/storage` | Storage dashboard — disk usage per show folder |
 | `/search` | Advanced search (local + TVMaze API) |
+| `/trending` | Trending shows from TVMaze |
+| `/compare` | Side-by-side show comparison |
 | `/showlist/show/{id}` | Show detail with episodes, NZB search, catch-up |
 | `/filters/*` | Filter management (shows, genres, networks, countries, languages, types) |
 | `/admin` | Admin operations, data export/import |
@@ -245,8 +291,9 @@ Managed by Hangfire. Status is visible on the home page and at `/hangfire`.
 
 From the Admin page (`/admin`):
 
-- **Export:** Downloads a JSON file containing all your show selections (wanted/unwanted) and watched episode history. Uses TVMaze IDs so exports are portable across database instances.
-- **Import:** Upload a previously exported JSON file. Idempotent - skips records that already exist. Useful for migrating to a new database or restoring from backup.
+- **Export (JSON/CSV):** Downloads your show selections (wanted/unwanted) and watched episode history. Uses TVMaze IDs so exports are portable across database instances.
+- **Import (JSON):** Upload a previously exported JSON file. Idempotent — skips records that already exist. Useful for migrating to a new database or restoring from backup.
+- **Import from paths:** Upload a text file of video file paths (one per line) to bulk-import watched shows. Matches folder names to shows in the database, marks them as wanted, and marks episodes as watched based on S01E01/1x01 patterns in filenames. Only matches shows premiering in 2015 or earlier, and for those shows marks all prior episodes as watched too.
 
 ## Existing Database Setup
 
@@ -276,9 +323,11 @@ src/
 
 ## Tech Stack
 
-- .NET 10 / Blazor Server
+- .NET 10 / Blazor Server (Interactive Server rendering)
 - Entity Framework Core 10 (SQL Server)
 - Hangfire (background job scheduling)
 - TVMaze API (show/episode data)
 - Flurl.Http (HTTP client)
+- Bootstrap 5.3 (UI framework)
 - Pushover / Discord / Email (notifications)
+- PWA support (manifest, service worker)
