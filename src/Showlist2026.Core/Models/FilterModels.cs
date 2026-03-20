@@ -7,7 +7,6 @@ namespace Showlist2026.Models
     public class ShowFilter
     {
         public Show ep;
-        public bool privuser;
         public bool activelyselected;
         public bool activelyignored;
         public bool activelywatched;
@@ -24,7 +23,6 @@ namespace Showlist2026.Models
             activelyignored = false;
             activelyselected = false;
             activelywatched = false;
-            privuser = false;
         }
         public ShowFilter(Show e)
         {
@@ -32,7 +30,6 @@ namespace Showlist2026.Models
             activelyignored = false;
             activelyselected = false;
             activelywatched = false;
-            privuser = false;
         }
         public ShowFilter(EpFilter efilter)
         {
@@ -40,7 +37,6 @@ namespace Showlist2026.Models
             activelyignored = efilter.Activelyignored;
             activelyselected = efilter.Activelyselected;
             activelywatched = false;
-            privuser = efilter.privuser;
         }
 
         public bool Missed
@@ -132,7 +128,6 @@ namespace Showlist2026.Models
     public class EpFilter
     {
         public Episode ep;
-        public bool privuser;
         private bool _activelyselected;
         private bool _activelyignored;
         public bool activelywatched;
@@ -154,7 +149,6 @@ namespace Showlist2026.Models
             _activelyignored = false;
             _activelyselected = false;
             activelywatched = false;
-            privuser = false;
             TvSites = TVSites;
         }
         public EpFilter(Episode e, List<TVSite> TVSites)
@@ -163,7 +157,6 @@ namespace Showlist2026.Models
             _activelyignored = false;
             _activelyselected = false;
             activelywatched = false;
-            privuser = false;
             TvSites = TVSites;
         }
         public bool AlreadyDecidedUpon

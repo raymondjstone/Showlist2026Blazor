@@ -14,7 +14,9 @@
                                 <h2>
                                     <FilterButtons Model="@ShowFilter.showFilter" OnFilterChanged="OnFilterChanged" />
                                     <a href="/showlist/show/@show.Id">@show.name</a>
-                                    <i role="button" class="far fa-clipboard" title="Suggested regexp for show name"></i>
+                                    <i role="button" class="far fa-clipboard"
+                                       title="@show.regexp"
+                                       data-copy="@show.regexp"></i>
                                 </h2>
 
                                 <br />

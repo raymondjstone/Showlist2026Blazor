@@ -16,10 +16,9 @@
                data-bs-toggle="popover" data-bs-html="true" data-bs-content="@Episode.ep.show.summarycleanwithimage">
                 @Episode.ep.show.name
             </a>
-            @if (Episode.privuser)
-            {
-                <i role="button" class="far fa-clipboard" title="Suggested regexp for show name"></i>
-            }
+            <i role="button" class="far fa-clipboard"
+                title="@Episode.ep.show.regexp"
+                data-copy="@Episode.ep.show.regexp"></i>
             @if (string.IsNullOrEmpty(Episode.ep.show.FolderName))
             {
                 <a href="/showlist/show/@(Episode.ep.show.Id)?setfoldername=true" target="_blank" title="Create Folder name">
@@ -173,4 +172,5 @@
     [Parameter] public EpFilter Episode { get; set; }
     [Parameter] public EventCallback<(long id, string type, bool? state)> OnFilterChanged { get; set; }
     [Parameter] public EventCallback<(long id, bool state)> OnWatchedChanged { get; set; }
+
 }
