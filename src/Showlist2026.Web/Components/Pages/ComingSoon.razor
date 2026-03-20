@@ -106,7 +106,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        showList = AppService.ComingSoonForUser(1, 180)
+        showList = AppService.ComingSoonForUser()
             .OrderBy(a => a.ep.name).ToList();
 
         var showIds = showList.Where(s => s.ep != null).Select(s => s.ep.Id).ToList();

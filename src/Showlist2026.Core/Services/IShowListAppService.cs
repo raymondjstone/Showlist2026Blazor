@@ -15,7 +15,7 @@ namespace Showlist2026.Services
         List<EpFilter> AiringAroundNowForUser(int daysminus = -15, int daysplus = 15, bool firstshowOnly = false, bool includeIgnored = false, bool includeWatched = false);
         List<EpFilter> UndecidedShows();
         List<EpFilter> NextUnwatchedPerShow();
-        List<ShowFilter> ComingSoonForUser(int daysminus = 1, int daysplus = 180);
+        List<ShowFilter> ComingSoonForUser(int daysminus = 1, int daysplus = 366);
         List<Show> NoFolderList();
         Show ShowPageData(long id);
         List<TVSite> TvSites();

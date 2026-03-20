@@ -901,7 +901,7 @@ namespace Showlist2026.Services
         }
 
 
-        public List<ShowFilter> ComingSoonForUser(int daysminus = 1, int daysplus = 180)
+        public List<ShowFilter> ComingSoonForUser(int daysminus = 1, int daysplus = 366)
         {
 
 

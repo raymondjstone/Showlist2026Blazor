@@ -70,7 +70,7 @@ else
                             <div class="card h-100">
                                 <div class="card-body">
                                     <h6 class="card-title">
-                                        <a href="/showlist/show/@ep.ep.show.Id">@ep.ep.show.name</a>
+                                        <a href="/showlist/show/@ep.ep.show.Id" target="_blank">@ep.ep.show.name</a>
                                     </h6>
                                     <p class="card-text mb-1">
                                         @(ep.ep.EpNumberFormatted) - @ep.ep.name
@@ -98,7 +98,7 @@ else
                 <div class="list-group" style="max-height: 480px; overflow-y: auto;">
                     @foreach (var show in stats.recentshows)
                     {
-                        <a href="/showlist/show/@show.Id" class="list-group-item list-group-item-action">
+                        <a href="/showlist/show/@show.Id" target="_blank" class="list-group-item list-group-item-action">
                             @show.name
                         </a>
                     }
