@@ -30,6 +30,8 @@ namespace Showlist2026.Data
         public DbSet<TouchFile> TouchFiles { get; set; }
         public DbSet<TouchFolder> TouchFolder { get; set; }
         public DbSet<WatchedHistory> WatchedHistories { get; set; }
+        public DbSet<UserGivenUpSelection> UserGivenUpSelections { get; set; }
+        public DbSet<AppSetting> AppSettings { get; set; }
 
         public ShowlistDbContext(DbContextOptions<ShowlistDbContext> options)
             : base(options)

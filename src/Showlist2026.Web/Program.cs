@@ -5,6 +5,7 @@ using Showlist2026.Configuration;
 using Showlist2026.Data;
 using Showlist2026.Services;
 using Showlist2026.Web.Components;
+using Showlist2026.Web.Configuration;
 using Showlist2026.Web.Health;
 using Showlist2026.Web.Services;
 
@@ -12,6 +13,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = Environment.GetEnvironmentVariable("SHOWLIST_DB_CONNECTION")
     ?? builder.Configuration.GetConnectionString("Default")!;
+
+// Add DB settings as highest-priority config source (overrides appsettings, env vars, user secrets)
+((IConfigurationBuilder)builder.Configuration).Add(new DbConfigurationSource(connectionString));
 
 // Configuration
 builder.Services.Configure<ShowlistOptions>(builder.Configuration.GetSection("Showlist"));

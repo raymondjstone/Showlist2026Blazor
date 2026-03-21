@@ -68,7 +68,7 @@ else
 
     private async Task LoadData()
     {
-        noFolderList = AppService.NoFolderList().OrderByDescending(a => a.showid).ToList();
+        noFolderList = AppService.NoFolderList().OrderBy(a => a.name).ToList();
     }
 
     private void ShowFolderModal(Show show)

@@ -36,6 +36,10 @@ namespace Showlist2026.Services
         Task<bool> GenreFilter(long id, bool? statewanted);
         Task<bool> WatchedFilter(long id, bool statewanted);
         Task<bool> SeasonWatchedFilter(long id, long season, bool statewanted);
+        Task<bool> GivenUpFilter(long id, bool statewanted);
+        HashSet<int> GivenUpEpisodeIds();
+        List<EpFilter> MissedEpisodes();
+        List<EpFilter> GivenUpEpisodes();
         Task<bool> SetFolderName(long id, string foldername);
         Task<List<FileInfo>> Dirlist(string dirName, int daysOldToAllow, string filter = "*.*", int minSizeAllowed = 50000);
         Task<List<TouchFile>> ShowDownloaded(int year = 0);

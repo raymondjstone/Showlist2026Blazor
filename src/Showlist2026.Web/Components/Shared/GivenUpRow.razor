@@ -16,36 +16,10 @@
                data-bs-toggle="popover" data-bs-html="true" data-bs-content="@Episode.ep.show.summarycleanwithimage">
                 @Episode.ep.show.name
             </a>
-            <i role="button" class="far fa-clipboard"
-                title="@Episode.ep.show.regexp"
-                data-copy="@Episode.ep.show.regexp"></i>
-            @if (string.IsNullOrEmpty(Episode.ep.show.FolderName))
-            {
-                <a href="/showlist/show/@(Episode.ep.show.Id)?setfoldername=true" target="_blank" title="Create Folder name">
-                    <i class="fa-solid fa-folder-plus"></i>
-                </a>
-            }
-            @if (Episode.TvSites != null)
-            {
-                foreach (var z in Episode.TvSites.Where(a => a.Active))
-                {
-                    var url = z.URLTemplate
-                        .Replace("{URLSearchTerm}", Episode.ep.show.URLSearchTerm)
-                        .Replace("{URLSearchTermNameOnly}", Episode.ep.show.URLSearchTermNameOnly)
-                        .Replace("{URLSearchTermGeekSeek}", Episode.ep.show.URLSearchTermGeekSeek);
-                    <a href="@url" target="_blank"><i class="fa-solid fa-magnifying-glass"></i></a>
-                }
-            }
         </div>
         <div class="col-2">
-            <i class="far fa-eye" title="Mark as watched" role="button"
-               @onclick="() => OnWatchedChanged.InvokeAsync((Episode.ep.Id, true))">
-            </i>
-            @if (OnGivenUpChanged.HasDelegate)
-            {
-                <i class="fas fa-flag text-danger ms-1" title="Give up on this episode" role="button" style="font-size:0.75rem;"
-                   @onclick="() => OnGivenUpChanged.InvokeAsync((Episode.ep.Id, true))"></i>
-            }
+            <i class="fas fa-undo text-success" title="Undo given up" role="button"
+               @onclick="() => OnUndoGivenUp.InvokeAsync((Episode.ep.Id, false))"></i>
             @(Episode.ep.EpNumberFormatted)
             <a href="#" data-bs-toggle="popover" data-bs-html="true" data-bs-content="@Episode.ep.summarycleanwithimage">@Episode.ep.name</a>
         </div>
@@ -144,13 +118,8 @@
                     <span class="badge @mobileStatusClass ms-1" style="font-size:0.65rem;">@Episode.ep.show.status</span>
                 </div>
                 <div class="d-flex align-items-center gap-2 small">
-                    <i class="far fa-eye" title="Mark as watched" role="button"
-                       @onclick="() => OnWatchedChanged.InvokeAsync((Episode.ep.Id, true))"></i>
-                    @if (OnGivenUpChanged.HasDelegate)
-                    {
-                        <i class="fas fa-flag text-danger" title="Give up on this episode" role="button" style="font-size:0.7rem;"
-                           @onclick="() => OnGivenUpChanged.InvokeAsync((Episode.ep.Id, true))"></i>
-                    }
+                    <i class="fas fa-undo text-success" title="Undo given up" role="button"
+                       @onclick="() => OnUndoGivenUp.InvokeAsync((Episode.ep.Id, false))"></i>
                     <span class="fw-semibold">@Episode.ep.EpNumberFormatted</span>
                     <span class="text-muted">@Episode.ep.name</span>
                 </div>
@@ -181,7 +150,5 @@
 @code {
     [Parameter] public EpFilter Episode { get; set; }
     [Parameter] public EventCallback<(long id, string type, bool? state)> OnFilterChanged { get; set; }
-    [Parameter] public EventCallback<(long id, bool state)> OnWatchedChanged { get; set; }
-    [Parameter] public EventCallback<(long id, bool state)> OnGivenUpChanged { get; set; }
-
+    [Parameter] public EventCallback<(long id, bool state)> OnUndoGivenUp { get; set; }
 }

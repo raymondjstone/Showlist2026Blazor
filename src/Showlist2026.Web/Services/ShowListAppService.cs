@@ -400,7 +400,7 @@ namespace Showlist2026.Services
 
             // Materialize watched episode IDs as a HashSet for fast in-memory filtering
             var watchedEpisodeIds = _db.UserWatchedSelections
-                
+
                 .Select(w => w.episode.Id)
                 .ToHashSet();
             _logger.LogDebug($"PERF[AiringAroundNow] Watched IDs loaded ({watchedEpisodeIds.Count} watched): {sw.ElapsedMilliseconds}ms");
@@ -1538,6 +1538,208 @@ namespace Showlist2026.Services
                 return false;
             }
 
+        }
+
+        public List<EpFilter> MissedEpisodes()
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            _db.Database.SetCommandTimeout(120);
+
+            // 1. Get wanted show IDs (include = true)
+            var wantedShowIds = _db.UserShowSelections
+                .Where(s => s.include)
+                .Select(s => s.show.Id)
+                .ToList();
+            _logger.LogDebug($"PERF[MissedEpisodes] Wanted shows: {wantedShowIds.Count} in {sw.ElapsedMilliseconds}ms");
+
+            if (wantedShowIds.Count == 0)
+                return new List<EpFilter>();
+
+            // 2. Get watched episode IDs
+            var watchedEpisodeIds = _db.UserWatchedSelections
+                .Select(w => w.episode.Id)
+                .ToHashSet();
+            _logger.LogDebug($"PERF[MissedEpisodes] Watched episodes: {watchedEpisodeIds.Count} in {sw.ElapsedMilliseconds}ms");
+
+            // 3. Get given-up episode IDs
+            var givenUpIds = _db.UserGivenUpSelections
+                .Select(g => g.episode.Id)
+                .ToHashSet();
+            _logger.LogDebug($"PERF[MissedEpisodes] Given-up episodes: {givenUpIds.Count} in {sw.ElapsedMilliseconds}ms");
+
+            // 4. Query episodes: wanted shows, aired in the past, not watched, not given up
+            var now = DateTimeOffset.UtcNow;
+            var eps = _db.Episodes
+                .Where(e => wantedShowIds.Contains(e.show.Id)
+                    && e.AirDateOffset2 != null
+                    && e.AirDateOffset2 < now)
+                .Include(e => e.show)
+                .Include(e => e.show.Languages)
+                .Include(e => e.show.Types)
+                .Include(e => e.show.WebNetworks)
+                .Include(e => e.show.Networks)
+                .ToList();
+            _logger.LogDebug($"PERF[MissedEpisodes] All past episodes for wanted shows: {eps.Count} in {sw.ElapsedMilliseconds}ms");
+
+            // 5. Filter out watched and given-up in memory
+            eps = eps.Where(e => !watchedEpisodeIds.Contains(e.Id) && !givenUpIds.Contains(e.Id)).ToList();
+            _logger.LogDebug($"PERF[MissedEpisodes] After watched/given-up filter: {eps.Count} in {sw.ElapsedMilliseconds}ms");
+
+            // 6. Attach genres
+            var showIds = eps.Where(e => e.show != null).Select(e => e.show.Id).Distinct().ToHashSet();
+            var genresForShows = _db.Genres
+                .Include(g => g.genretext)
+                .Where(g => g.show != null && showIds.Contains(g.show.Id))
+                .ToList();
+            var genresByShowId = genresForShows.GroupBy(g => g.show.Id)
+                .ToDictionary(g => g.Key, g => (ICollection<Genre>)g.ToList());
+            foreach (var ep in eps.Where(e => e.show != null))
+            {
+                if (genresByShowId.TryGetValue(ep.show.Id, out var genres))
+                    ep.show.Genres = genres;
+            }
+
+            // Load navigation properties into EF change tracker
+            _db.Timezones.ToList();
+            _db.GenreTexts.ToList();
+
+            // 7. Build EpFilter list
+            var showFilters = _db.UserShowSelections.Include(s => s.show).ToList();
+            var networkFilters = _db.UserNetworkSelections.Include(s => s.network).ToList();
+            var webnetworkFilters = _db.UserWebNetworkSelections.Include(s => s.webnetwork).ToList();
+            var genreFilters = _db.UserGenreSelections.ToList();
+            var languageFilters = _db.UserLanguageSelections.Include(s => s.language).ToList();
+            var typeFilters = _db.UserTypeSelections.Include(s => s.type).ToList();
+            var countryFilters = _db.UserCountrySelections.Include(s => s.country).ToList();
+
+            var tvsites = TvSites();
+            var showFilterMap = BuildFilterDict(showFilters);
+            var networkFilterMap = BuildFilterDict(networkFilters);
+            var webnetworkFilterMap = BuildFilterDict(webnetworkFilters);
+            var genreFilterMap = BuildFilterDict(genreFilters);
+            var languageFilterMap = BuildFilterDict(languageFilters);
+            var typeFilterMap = BuildFilterDict(typeFilters);
+            var countryFilterMap = BuildFilterDict(countryFilters);
+
+            var result = new List<EpFilter>();
+            foreach (var e in eps.Where(a => a.show != null))
+            {
+                var ef = CreateEpFilter(e, showFilterMap, networkFilterMap, webnetworkFilterMap,
+                    genreFilterMap, languageFilterMap, typeFilterMap, countryFilterMap, tvsites);
+                result.Add(ef);
+            }
+
+            _logger.LogDebug($"PERF[MissedEpisodes] TOTAL: {sw.ElapsedMilliseconds}ms | {result.Count} missed episodes");
+            return result.OrderByDescending(a => a.ep.AiringTime)
+                .ThenBy(a => a.ep.show.name)
+                .ThenBy(a => a.ep.season)
+                .ThenBy(a => a.ep.number)
+                .ToList();
+        }
+
+        public HashSet<int> GivenUpEpisodeIds()
+        {
+            return _db.UserGivenUpSelections
+                .Select(g => g.episode.Id)
+                .ToHashSet();
+        }
+
+        public async Task<bool> GivenUpFilter(long id, bool statewanted)
+        {
+            try
+            {
+                var existing = _db.UserGivenUpSelections
+                    .Where(a => a.episode.Id == id).FirstOrDefault();
+
+                if (existing == null && statewanted)
+                {
+                    var ep = _db.Episodes.Find((int)id);
+                    _db.Add(new UserGivenUpSelection
+                    {
+                        episode = ep,
+                        GivenUpDate = DateTimeOffset.UtcNow
+                    });
+                    await _db.SaveChangesAsync();
+                }
+                else if (existing != null && !statewanted)
+                {
+                    _db.Remove(existing);
+                    await _db.SaveChangesAsync();
+                }
+
+                return true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                return false;
+            }
+        }
+
+        public List<EpFilter> GivenUpEpisodes()
+        {
+            var givenUpEpisodeIds = _db.UserGivenUpSelections
+                .Select(g => g.episode.Id)
+                .ToHashSet();
+
+            if (givenUpEpisodeIds.Count == 0)
+                return new List<EpFilter>();
+
+            var givenUpIdsList = givenUpEpisodeIds.ToList();
+            var eps = _db.Episodes
+                .Where(e => givenUpIdsList.Contains(e.Id))
+                .Include(e => e.show)
+                .Include(e => e.show.Languages)
+                .Include(e => e.show.Types)
+                .Include(e => e.show.WebNetworks)
+                .Include(e => e.show.Networks)
+                .ToList();
+
+            // Attach genres
+            var showIds = eps.Where(e => e.show != null).Select(e => e.show.Id).Distinct().ToHashSet();
+            var genresForShows = _db.Genres
+                .Include(g => g.genretext)
+                .Where(g => g.show != null && showIds.Contains(g.show.Id))
+                .ToList();
+            var genresByShowId = genresForShows.GroupBy(g => g.show.Id)
+                .ToDictionary(g => g.Key, g => (ICollection<Genre>)g.ToList());
+            foreach (var ep in eps.Where(e => e.show != null))
+            {
+                if (genresByShowId.TryGetValue(ep.show.Id, out var genres))
+                    ep.show.Genres = genres;
+            }
+
+            // Load navigation properties
+            _db.Timezones.ToList();
+            _db.GenreTexts.ToList();
+
+            // Load user filter data for filter buttons
+            var showFilters = _db.UserShowSelections.Include(s => s.show).ToList();
+            var networkFilters = _db.UserNetworkSelections.Include(s => s.network).ToList();
+            var webnetworkFilters = _db.UserWebNetworkSelections.Include(s => s.webnetwork).ToList();
+            var genreFilters = _db.UserGenreSelections.ToList();
+            var languageFilters = _db.UserLanguageSelections.Include(s => s.language).ToList();
+            var typeFilters = _db.UserTypeSelections.Include(s => s.type).ToList();
+            var countryFilters = _db.UserCountrySelections.Include(s => s.country).ToList();
+
+            var tvsites = TvSites();
+            var showFilterMap = BuildFilterDict(showFilters);
+            var networkFilterMap = BuildFilterDict(networkFilters);
+            var webnetworkFilterMap = BuildFilterDict(webnetworkFilters);
+            var genreFilterMap = BuildFilterDict(genreFilters);
+            var languageFilterMap = BuildFilterDict(languageFilters);
+            var typeFilterMap = BuildFilterDict(typeFilters);
+            var countryFilterMap = BuildFilterDict(countryFilters);
+
+            var result = new List<EpFilter>();
+            foreach (var e in eps.Where(a => a.show != null))
+            {
+                var ef = CreateEpFilter(e, showFilterMap, networkFilterMap, webnetworkFilterMap,
+                    genreFilterMap, languageFilterMap, typeFilterMap, countryFilterMap, tvsites);
+                result.Add(ef);
+            }
+
+            return result.OrderByDescending(a => a.ep.AiringTime).ThenBy(a => a.ep.show.name).ToList();
         }
 
         public async Task<bool> SetFolderName(long id, string foldername)

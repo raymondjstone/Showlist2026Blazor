@@ -1,8 +1,8 @@
-@page "/missed"
+@page "/given-up"
 @rendermode InteractiveServer
 @inject IShowListAppService AppService
 
-<PageTitle>Missed Stuff</PageTitle>
+<PageTitle>Given Up Episodes</PageTitle>
 
 @if (episodes == null)
 {
@@ -15,20 +15,28 @@
 else
 {
     <div class="container-fluid">
-        <h4>Missed Episodes (@episodes.Count)</h4>
-        <div class="row fw-bold d-none d-md-flex">
-            <div class="col-1">Date</div>
-            <div class="col-2">Show</div>
-            <div class="col-2">Episode</div>
-            <div class="col-1">Language</div>
-            <div class="col-2">Network(s)</div>
-            <div class="col-2">Genre</div>
-            <div class="col-1">Status</div>
-            <div class="col-1">Type</div>
-        </div>
-        @foreach (var ep in episodes)
+        <h4>Given Up Episodes (@episodes.Count)</h4>
+
+        @if (episodes.Count == 0)
         {
-            <EpisodeRow Episode="ep" OnFilterChanged="HandleFilterChanged" OnWatchedChanged="HandleWatchedChanged" OnGivenUpChanged="HandleGivenUpChanged" />
+            <p class="text-muted">No episodes marked as given up.</p>
+        }
+        else
+        {
+            <div class="row fw-bold d-none d-md-flex">
+                <div class="col-1">Date</div>
+                <div class="col-2">Show</div>
+                <div class="col-2">Episode</div>
+                <div class="col-1">Language</div>
+                <div class="col-2">Network(s)</div>
+                <div class="col-2">Genre</div>
+                <div class="col-1">Status</div>
+                <div class="col-1">Type</div>
+            </div>
+            @foreach (var ep in episodes)
+            {
+                <GivenUpRow Episode="ep" OnFilterChanged="HandleFilterChanged" OnUndoGivenUp="HandleUndoGivenUp" />
+            }
         }
     </div>
 }
@@ -43,7 +51,7 @@ else
 
     private async Task LoadData()
     {
-        episodes = AppService.MissedEpisodes();
+        episodes = AppService.GivenUpEpisodes();
     }
 
     private async Task HandleFilterChanged((long id, string type, bool? state) args)
@@ -61,15 +69,9 @@ else
         await LoadData();
     }
 
-    private async Task HandleWatchedChanged((long id, bool state) args)
+    private async Task HandleUndoGivenUp((long id, bool state) args)
     {
-        await AppService.WatchedFilter(args.id, args.state);
-        await LoadData();
-    }
-
-    private async Task HandleGivenUpChanged((long id, bool state) args)
-    {
-        await AppService.GivenUpFilter(args.id, args.state);
+        await AppService.GivenUpFilter(args.id, false);
         await LoadData();
     }
 }

@@ -24,6 +24,12 @@ else
                 <h2>
                     <FilterButtons Model="@ShowFilter.showFilter" OnFilterChanged="HandleFilterChanged" />
                     <a href="https://www.tvmaze.com/shows/@show.showid">@show.name</a>
+                    @if (!string.IsNullOrEmpty(show.regexp))
+                    {
+                        <a href="#" data-copy="@show.regexp" class="ms-2 text-muted" title="Copy regex to clipboard">
+                            <i class="fas fa-clipboard fa-sm"></i>
+                        </a>
+                    }
                 </h2>
                 <br />
                 Folder - @(show.FolderName ?? $"{show.SuggestedFolderName ?? show.DefaultFolderName} [default]")

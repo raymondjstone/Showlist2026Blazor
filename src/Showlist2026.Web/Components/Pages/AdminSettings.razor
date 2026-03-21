@@ -1,0 +1,241 @@
+@page "/admin/settings"
+@rendermode InteractiveServer
+@inject IConfiguration Configuration
+@inject IDbContextFactory<ShowlistDbContext> DbFactory
+@using Microsoft.EntityFrameworkCore
+@using Showlist2026.Data
+
+<PageTitle>Settings</PageTitle>
+
+<div class="container-fluid mt-3">
+    <h4>Application Settings</h4>
+    <p class="text-muted small">
+        Settings are resolved in order: <strong>Database</strong> (highest priority) &gt; Environment Variables &gt; User Secrets &gt; appsettings.json (lowest).
+        Environment variables use <code>__</code> as separator (e.g. <code>Showlist__NzbPlanetApiKey</code>).
+    </p>
+
+    @if (statusMessage != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @statusMessage
+            <button type="button" class="btn-close" @onclick="() => statusMessage = null"></button>
+        </div>
+    }
+
+    <div class="table-responsive">
+        <table class="table table-sm table-striped">
+            <thead>
+                <tr>
+                    <th>Setting</th>
+                    <th>Current Value</th>
+                    <th>Source</th>
+                    <th>DB Override</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var setting in settingsList)
+                {
+                    <tr>
+                        <td><code>@setting.Key</code></td>
+                        <td>
+                            @if (setting.IsSensitive)
+                            {
+                                @if (!string.IsNullOrEmpty(setting.CurrentValue))
+                                {
+                                    <span class="text-muted">****@(setting.CurrentValue.Length > 4 ? setting.CurrentValue[^4..] : "****")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted fst-italic">(not set)</span>
+                                }
+                            }
+                            else
+                            {
+                                @if (!string.IsNullOrEmpty(setting.CurrentValue))
+                                {
+                                    @setting.CurrentValue
+                                }
+                                else
+                                {
+                                    <span class="text-muted fst-italic">(not set)</span>
+                                }
+                            }
+                        </td>
+                        <td>
+                            @{
+                                var srcBadge = setting.Source switch
+                                {
+                                    "Database" => "bg-primary",
+                                    "Environment" => "bg-info",
+                                    "User Secrets" => "bg-warning text-dark",
+                                    _ => "bg-secondary"
+                                };
+                            }
+                            <span class="badge @srcBadge">@setting.Source</span>
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm" style="min-width:200px"
+                                   value="@setting.DbValue"
+                                   @onchange="(e) => setting.NewDbValue = e.Value?.ToString()"
+                                   placeholder="@(setting.IsSensitive ? "" : setting.DefaultValue)" />
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => SaveSetting(setting)"
+                                        title="Save to database">
+                                    <i class="fas fa-save"></i>
+                                </button>
+                                @if (!string.IsNullOrEmpty(setting.DbValue))
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteSetting(setting)"
+                                            title="Remove DB override">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header">Connection String</div>
+        <div class="card-body">
+            <code>@MaskConnectionString(Configuration.GetConnectionString("Default"))</code>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<SettingDisplay> settingsList = new();
+    private Dictionary<string, string> dbSettings = new();
+    private string statusMessage;
+
+    protected override void OnInitialized()
+    {
+        LoadSettings();
+    }
+
+    private void LoadSettings()
+    {
+        // Load DB overrides
+        try
+        {
+            using var db = DbFactory.CreateDbContext();
+            dbSettings = db.AppSettings.ToDictionary(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            dbSettings = new();
+        }
+
+        settingsList = new List<SettingDisplay>
+        {
+            MakeSetting("Showlist:TvNameListPath", @"C:\tvnamelist\", false),
+            MakeSetting("Showlist:ShowFolderBasePath", @"F:\tv_name_list\", false),
+            MakeSetting("Showlist:TvMazeBaseUrl", "http://api.tvmaze.com", false),
+            MakeSetting("Showlist:NzbPlanetApiKey", "", true),
+            MakeSetting("Notifications:Pushover:Enabled", "false", false),
+            MakeSetting("Notifications:Pushover:ApiKey", "", true),
+            MakeSetting("Notifications:Pushover:UserKey", "", true),
+            MakeSetting("Notifications:Discord:Enabled", "false", false),
+            MakeSetting("Notifications:Discord:WebhookUrl", "", true),
+            MakeSetting("Notifications:Email:Enabled", "false", false),
+            MakeSetting("Notifications:Email:SmtpHost", "", false),
+            MakeSetting("Notifications:Email:SmtpPort", "587", false),
+            MakeSetting("Notifications:Email:From", "", false),
+            MakeSetting("Notifications:Email:To", "", false),
+            MakeSetting("Notifications:Email:Username", "", false),
+            MakeSetting("Notifications:Email:Password", "", true),
+        };
+    }
+
+    private SettingDisplay MakeSetting(string key, string defaultValue, bool sensitive)
+    {
+        var currentValue = Configuration[key];
+        var dbValue = dbSettings.GetValueOrDefault(key);
+        var envKey = key.Replace(":", "__");
+        var envValue = Environment.GetEnvironmentVariable(envKey);
+
+        string source;
+        if (!string.IsNullOrEmpty(dbValue))
+            source = "Database";
+        else if (!string.IsNullOrEmpty(envValue))
+            source = "Environment";
+        else if (!string.IsNullOrEmpty(currentValue) && currentValue != defaultValue)
+            source = "User Secrets";
+        else
+            source = "Default";
+
+        return new SettingDisplay
+        {
+            Key = key,
+            CurrentValue = currentValue ?? "",
+            DefaultValue = defaultValue,
+            DbValue = dbValue ?? "",
+            Source = source,
+            IsSensitive = sensitive
+        };
+    }
+
+    private async Task SaveSetting(SettingDisplay setting)
+    {
+        var value = setting.NewDbValue ?? setting.DbValue;
+        using var db = DbFactory.CreateDbContext();
+
+        var existing = await db.AppSettings.FindAsync(setting.Key);
+        if (existing != null)
+        {
+            existing.Value = value;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            db.AppSettings.Add(new Showlist2026.Entities.AppSetting
+            {
+                Key = setting.Key,
+                Value = value,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+        await db.SaveChangesAsync();
+        statusMessage = $"Saved '{setting.Key}' to database. Restart the app for changes to take effect.";
+        LoadSettings();
+    }
+
+    private async Task DeleteSetting(SettingDisplay setting)
+    {
+        using var db = DbFactory.CreateDbContext();
+        var existing = await db.AppSettings.FindAsync(setting.Key);
+        if (existing != null)
+        {
+            db.AppSettings.Remove(existing);
+            await db.SaveChangesAsync();
+        }
+        statusMessage = $"Removed DB override for '{setting.Key}'. Restart the app for changes to take effect.";
+        LoadSettings();
+    }
+
+    private string MaskConnectionString(string cs)
+    {
+        if (string.IsNullOrEmpty(cs)) return "(not set)";
+        // Mask password in connection string
+        return System.Text.RegularExpressions.Regex.Replace(cs,
+            @"(Password|Pwd)\s*=\s*[^;]+", "$1=****",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
+    private class SettingDisplay
+    {
+        public string Key { get; set; }
+        public string CurrentValue { get; set; }
+        public string DefaultValue { get; set; }
+        public string DbValue { get; set; }
+        public string NewDbValue { get; set; }
+        public string Source { get; set; }
+        public bool IsSensitive { get; set; }
+    }
+}

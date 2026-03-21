@@ -44,7 +44,7 @@
             {
                 if (searchText.Length >= 2)
                 {
-                    results = AppService.showlist(searchText).Take(20).ToList();
+                    results = AppService.showlist(searchText);
                 }
                 else
                 {
