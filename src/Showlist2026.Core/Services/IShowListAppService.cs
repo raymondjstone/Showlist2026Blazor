@@ -64,6 +64,7 @@ namespace Showlist2026.Services
         // Feature 4: Bulk actions
         Task BulkSetShowFilter(List<long> showIds, bool? state);
         Task CatchUpShow(long showId);
+        Task GiveUpShow(long showId);
 
         // Feature 6: Download progress
         List<DownloadProgressModel> GetDownloadProgress();

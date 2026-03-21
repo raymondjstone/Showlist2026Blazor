@@ -41,6 +41,10 @@ else
                         @if (catchingUp) { <span class="spinner-border spinner-border-sm"></span> }
                         <i class="fas fa-forward"></i> Catch Up
                     </button>
+                    <button class="btn btn-danger btn-sm ms-1" @onclick="GiveUp" disabled="@givingUp">
+                        @if (givingUp) { <span class="spinner-border spinner-border-sm"></span> }
+                        <i class="fas fa-flag"></i> Give Up
+                    </button>
                 </div>
                 <br />
 
@@ -299,6 +303,7 @@ else
     private string activeSeasonTab;
     private bool showFolderModal;
     private bool catchingUp;
+    private bool givingUp;
     private string showNotes = "";
     private int showPriority;
     private bool notesSaved;
@@ -524,6 +529,14 @@ else
         catchingUp = true;
         await AppService.CatchUpShow(show.Id);
         catchingUp = false;
+        await LoadData();
+    }
+
+    private async Task GiveUp()
+    {
+        givingUp = true;
+        await AppService.GiveUpShow(show.Id);
+        givingUp = false;
         await LoadData();
     }
 

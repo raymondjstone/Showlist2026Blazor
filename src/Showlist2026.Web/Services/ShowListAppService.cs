@@ -1,17 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Flurl.Http;
-using Altairis.Pushover.Client;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Showlist2026.Configuration;
 using Showlist2026.Data;
@@ -19,8 +9,6 @@ using Showlist2026.Entities;
 using Showlist2026.Models;
 using Showlist2026.NZBPlanetApiJSON;
 using Showlist2026.TVMaze;
-using Showlist2026.TVMaze.TVMazeEpisodes;
-using Showlist2026.TVMaze.TVMazePage;
 using Country = Showlist2026.Entities.Country;
 using Network = Showlist2026.Entities.Network;
 using Type = Showlist2026.Entities.Type;
@@ -2112,6 +2100,40 @@ namespace Showlist2026.Services
                     episode = e,
                 }).ToList();
                 _db.AddRange(newWatched);
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task GiveUpShow(long showId)
+        {
+            var airedEpisodeIds = _db.Episodes
+                .Where(e => e.show.Id == showId && e.AirDateOffset2 < DateTimeOffset.UtcNow)
+                .Select(e => e.Id)
+                .ToList();
+
+            var alreadyWatchedIds = _db.UserWatchedSelections
+                .Where(w => airedEpisodeIds.Contains(w.episode.Id))
+                .Select(w => w.episode.Id)
+                .ToHashSet();
+
+            var alreadyGivenUpIds = _db.UserGivenUpSelections
+                .Where(g => airedEpisodeIds.Contains(g.episode.Id))
+                .Select(g => g.episode.Id)
+                .ToHashSet();
+
+            var unwatchedIds = airedEpisodeIds
+                .Where(id => !alreadyWatchedIds.Contains(id) && !alreadyGivenUpIds.Contains(id))
+                .ToList();
+
+            if (unwatchedIds.Any())
+            {
+                var episodes = _db.Episodes.Where(e => unwatchedIds.Contains(e.Id)).ToList();
+                var newGivenUp = episodes.Select(e => new UserGivenUpSelection
+                {
+                    episode = e,
+                    GivenUpDate = DateTimeOffset.UtcNow
+                }).ToList();
+                _db.AddRange(newGivenUp);
                 await _db.SaveChangesAsync();
             }
         }
