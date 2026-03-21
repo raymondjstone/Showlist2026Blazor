@@ -79,7 +79,7 @@ else
 
     private async Task LoadData()
     {
-        var userAirList = AppService.AiringAroundNowForUser(-32, 15)
+        var userAirList = AppService.AiringAroundNowForUser(-62, 15)
             .OrderBy(a => a.ep.AiringTime)
             .ThenBy(a => a.ep.show.name)
             .ThenBy(a => a.ep.season)
