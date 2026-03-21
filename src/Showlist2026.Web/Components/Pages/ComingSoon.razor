@@ -55,6 +55,10 @@ else
                                                     };
                                                 }
                                                 <span class="badge @statusClass ms-2">@s.ep.status</span>
+                                                @if (s.ep.ShowStart > DateTime.MinValue)
+                                                {
+                                                    <span class="badge bg-dark ms-2">@s.ep.ShowStart.ToString("dd MMM yyyy")</span>
+                                                }
                                             </h5>
                                             @if (s.ep.Types != null)
                                             {

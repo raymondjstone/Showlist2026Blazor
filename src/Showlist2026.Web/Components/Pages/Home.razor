@@ -59,6 +59,53 @@ else
             </div>
         </div>
 
+        @if (jobs != null && jobs.Any())
+        {
+            <div class="mt-4">
+                <h4>Background Jobs</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>Job</th>
+                                <th>Schedule</th>
+                                <th>Last Run</th>
+                                <th>Next Run</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var job in jobs)
+                            {
+                                var badgeClass = job.LastStatus switch
+                                {
+                                    "Succeeded" => "bg-success",
+                                    "Failed" => "bg-danger",
+                                    "Processing" => "bg-warning",
+                                    _ => "bg-secondary"
+                                };
+                                <tr>
+                                    <td>@job.JobName</td>
+                                    <td class="text-muted small">@job.Cron</td>
+                                    <td>@(job.LastExecution?.ToString("dd MMM HH:mm") ?? "Never")</td>
+                                    <td>@(job.NextExecution?.ToString("dd MMM HH:mm") ?? "-")</td>
+                                    <td>
+                                        <span class="badge @badgeClass">@job.LastStatus</span>
+                                        @if (!string.IsNullOrEmpty(job.Error))
+                                        {
+                                            <i class="fas fa-exclamation-triangle text-danger ms-1" title="@job.Error"></i>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        
+        
+
         @if (tonightsEpisodes != null && tonightsEpisodes.Any())
         {
             <div class="mt-4">
@@ -106,50 +153,6 @@ else
             </div>
         }
 
-        @if (jobs != null && jobs.Any())
-        {
-            <div class="mt-4">
-                <h4>Background Jobs</h4>
-                <div class="table-responsive">
-                    <table class="table table-sm table-striped">
-                        <thead>
-                            <tr>
-                                <th>Job</th>
-                                <th>Schedule</th>
-                                <th>Last Run</th>
-                                <th>Next Run</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var job in jobs)
-                            {
-                                var badgeClass = job.LastStatus switch
-                                {
-                                    "Succeeded" => "bg-success",
-                                    "Failed" => "bg-danger",
-                                    "Processing" => "bg-warning",
-                                    _ => "bg-secondary"
-                                };
-                                <tr>
-                                    <td>@job.JobName</td>
-                                    <td class="text-muted small">@job.Cron</td>
-                                    <td>@(job.LastExecution?.ToString("dd MMM HH:mm") ?? "Never")</td>
-                                    <td>@(job.NextExecution?.ToString("dd MMM HH:mm") ?? "-")</td>
-                                    <td>
-                                        <span class="badge @badgeClass">@job.LastStatus</span>
-                                        @if (!string.IsNullOrEmpty(job.Error))
-                                        {
-                                            <i class="fas fa-exclamation-triangle text-danger ms-1" title="@job.Error"></i>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        }
     </div>
 }
 
