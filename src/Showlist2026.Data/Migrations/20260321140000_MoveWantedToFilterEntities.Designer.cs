@@ -140,8 +140,6 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("genretextId");
-
                     b.HasIndex("showId");
 
                     b.ToTable("Genre", (string)null);
@@ -243,9 +241,6 @@ namespace Showlist2026.Data.Migrations
                     b.Property<int>("Priority")
                         .HasColumnType("int");
 
-                    b.Property<int?>("ShowUpdatedsId")
-                        .HasColumnType("int");
-
                     b.Property<int?>("TypesId")
                         .HasColumnType("int");
 
@@ -308,42 +303,7 @@ namespace Showlist2026.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("LanguagesId");
-
-                    b.HasIndex("NetworksId");
-
-                    b.HasIndex("ShowUpdatedsId");
-
-                    b.HasIndex("TypesId");
-
-                    b.HasIndex("WebNetworksId");
-
                     b.ToTable("Show", (string)null);
-                });
-
-            modelBuilder.Entity("Showlist2026.Entities.ShowUpdated", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("lastupdateprocessed")
-                        .HasColumnType("bit");
-
-                    b.Property<long>("showudatedid")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("updatedTimeStamp")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("xshowid")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ShowUpdated", (string)null);
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.TVDirectories", b =>
@@ -594,10 +554,6 @@ namespace Showlist2026.Data.Migrations
                         .WithMany()
                         .HasForeignKey("NetworksId");
 
-                    b.HasOne("Showlist2026.Entities.ShowUpdated", "ShowUpdateds")
-                        .WithMany()
-                        .HasForeignKey("ShowUpdatedsId");
-
                     b.HasOne("Showlist2026.Entities.Type", "Types")
                         .WithMany()
                         .HasForeignKey("TypesId");
@@ -609,8 +565,6 @@ namespace Showlist2026.Data.Migrations
                     b.Navigation("Languages");
 
                     b.Navigation("Networks");
-
-                    b.Navigation("ShowUpdateds");
 
                     b.Navigation("Types");
 

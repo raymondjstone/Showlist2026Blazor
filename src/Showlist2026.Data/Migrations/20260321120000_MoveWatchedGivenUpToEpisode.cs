@@ -61,45 +61,6 @@ namespace Showlist2026.Data.Migrations
                 DROP TABLE [dbo].[UserGivenUpSelection];
             ");
 
-            // Recreate views using new columns instead of junction tables
-            migrationBuilder.Sql(@"
-                CREATE VIEW [dbo].[IsWanted] AS
-                SELECT
-                    'http://showlist/showlist/show/' + CONVERT(VARCHAR(7), s.Id) AS show,
-                    s.name,
-                    e.name AS epName,
-                    e.season,
-                    e.number,
-                    e.episodeid,
-                    s.Id AS showid,
-                    e.Id,
-                    e.AirDateOffset2
-                FROM dbo.Show s
-                INNER JOIN dbo.Episode e ON e.showId = s.Id
-                WHERE s.Wanted = 1
-                    AND e.Watched = 0
-                    AND e.AirDateOffset2 < GETDATE();
-            ");
-
-            migrationBuilder.Sql(@"
-                CREATE VIEW [dbo].[IsWanted_Indexed]
-                WITH SCHEMABINDING AS
-                SELECT
-                    'http://showlist/showlist/show/' + CONVERT(VARCHAR(7), s.Id) AS show,
-                    s.name,
-                    e.name AS epName,
-                    e.season,
-                    e.number,
-                    e.episodeid,
-                    s.Id AS showid,
-                    e.Id,
-                    e.AirDateOffset2
-                FROM dbo.Show s
-                INNER JOIN dbo.Episode e ON e.showId = s.Id
-                WHERE s.Wanted = 1
-                    AND e.Watched = 0
-                    AND e.AirDateOffset2 < GETDATE();
-            ");
         }
 
         /// <inheritdoc />

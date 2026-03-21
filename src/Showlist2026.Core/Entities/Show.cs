@@ -29,7 +29,6 @@ namespace Showlist2026.Entities
 
 
         public List<Episode>? Episodes { get; set; }
-        public ShowUpdated? ShowUpdateds { get; set; }
         public Network? Networks { get; set; }
         public WebNetwork? WebNetworks { get; set; }
         public Type? Types { get; set; }

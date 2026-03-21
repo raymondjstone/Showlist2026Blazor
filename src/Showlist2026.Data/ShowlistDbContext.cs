@@ -14,7 +14,6 @@ namespace Showlist2026.Data
         public DbSet<Language> Languages { get; set; }
         public DbSet<Network> Networks { get; set; }
         public DbSet<Show> Shows { get; set; }
-        public DbSet<ShowUpdated> ShowUpdateds { get; set; }
         public DbSet<Type> Types { get; set; }
         public DbSet<WebNetwork> WebNetworks { get; set; }
         public DbSet<TVDirectories> TVDirectories { get; set; }
