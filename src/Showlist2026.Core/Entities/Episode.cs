@@ -30,8 +30,10 @@ namespace Showlist2026.Entities
         //[DatabaseGenerated(DatabaseGeneratedOption.Computed)]
         //public DateTimeOffset? AirdateOffset { get; private set; }
 
+        public bool Watched { get; set; }
+        public bool GivenUp { get; set; }
+
         public Show? show { get; set; }
-        public ICollection<UserWatchedSelection>? UserWatchedSelections { get; set; }
 
 
         public DateTimeOffset AiringTime

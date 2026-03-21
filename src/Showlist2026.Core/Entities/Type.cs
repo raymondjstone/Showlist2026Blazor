@@ -13,7 +13,7 @@ namespace Showlist2026.Entities
         //public long typeid { get; set; }
         public string? type{ get; set; }
 
-        public ICollection<UserTypeSelection>? UserTypeSelections { get; set; }
+        public bool? Wanted { get; set; }
 
     }
 }

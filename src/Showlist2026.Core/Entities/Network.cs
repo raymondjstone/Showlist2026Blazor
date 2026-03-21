@@ -17,7 +17,7 @@ namespace Showlist2026.Entities
         public Country? country { get; set; }
 
 
-        public ICollection<UserNetworkSelection>? UserNetworkSelections { get; set; }
+        public bool? Wanted { get; set; }
         public Timezone? tz { get; set; }
 
     }

@@ -13,7 +13,7 @@ namespace Showlist2026.Entities
         public string? code{ get; set; }
         public string? name { get; set; }
 
-        public ICollection<UserCountrySelection>? UserCountrySelections { get; set; }
+        public bool? Wanted { get; set; }
 
     }
 }

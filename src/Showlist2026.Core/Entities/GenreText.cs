@@ -14,7 +14,7 @@ namespace Showlist2026.Entities
 
         public ICollection<Genre>? Genres { get; set; }
 
-        public ICollection<UserGenreSelection>? UserGenreSelections { get; set; }
+        public bool? Wanted { get; set; }
 
     }
 }

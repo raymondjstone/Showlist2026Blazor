@@ -188,9 +188,8 @@
                 <tbody>
                     @foreach (var show in localResults)
                     {
-                        var sel = show.UserShowSelections?.FirstOrDefault();
-                        var wantedBadge = sel == null ? ("bg-secondary", "Undecided") :
-                                          sel.include ? ("bg-success", "Wanted") : ("bg-danger", "Excluded");
+                        var wantedBadge = show.Wanted == null ? ("bg-secondary", "Undecided") :
+                                          show.Wanted.Value ? ("bg-success", "Wanted") : ("bg-danger", "Excluded");
                         <tr>
                             <td>
                                 <a href="/showlist/show/@show.Id" target="_blank"

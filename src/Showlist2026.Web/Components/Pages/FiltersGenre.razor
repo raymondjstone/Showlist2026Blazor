@@ -27,7 +27,7 @@ else
                         <text>{No genre specified}</text>
                     }
                 </div>
-                @if (i.UserGenreSelections == null || i.UserGenreSelections.Count == 0)
+                @if (i.Wanted == null)
                 {
                     <div class="col-3">
                         <button class="btn btn-outline-secondary btn-sm" title="Always include show if the genre is @i.genre"
@@ -42,7 +42,7 @@ else
                         </button>
                     </div>
                 }
-                else if (i.UserGenreSelections.First().include)
+                else if (i.Wanted == true)
                 {
                     <div class="col-3">
                         <button class="btn btn-success btn-sm" title="Click to remove the always included filter"

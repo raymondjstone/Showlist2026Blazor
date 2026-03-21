@@ -41,24 +41,24 @@ else
         {
             <div class="row mb-1">
                 <div class="col-3">
-                    <a href="/showlist/show/@i.show.Id" title="@i.show.summary">
-                        @i.show.nameclean
+                    <a href="/showlist/show/@i.Id" title="@i.summary">
+                        @i.nameclean
                     </a>
                 </div>
                 <div class="col-5">
-                    Started: <b>@i.show.ShowStart.Year</b>, Status: <b>@i.show.status</b>
+                    Started: <b>@i.ShowStart.Year</b>, Status: <b>@i.status</b>
                 </div>
-                @if (i.include)
+                @if (i.Wanted == true)
                 {
                     <div class="col-2">
                         <button class="btn btn-success btn-sm" title="Click to remove the always included filter"
-                                @onclick="() => DeleteFilter(i.show.Id)">
+                                @onclick="() => DeleteFilter(i.Id)">
                             Always included
                         </button>
                     </div>
                     <div class="col-2">
                         <button class="btn btn-outline-secondary btn-sm" title="Always exclude show"
-                                @onclick="() => SetFilter(i.show.Id, false)">
+                                @onclick="() => SetFilter(i.Id, false)">
                             Always Exclude
                         </button>
                     </div>
@@ -67,13 +67,13 @@ else
                 {
                     <div class="col-2">
                         <button class="btn btn-outline-secondary btn-sm" title="Always include show"
-                                @onclick="() => SetFilter(i.show.Id, true)">
+                                @onclick="() => SetFilter(i.Id, true)">
                             Always Include
                         </button>
                     </div>
                     <div class="col-2">
                         <button class="btn btn-danger btn-sm" title="Click to remove the always excluded filter"
-                                @onclick="() => DeleteFilter(i.show.Id)">
+                                @onclick="() => DeleteFilter(i.Id)">
                             Always Excluded
                         </button>
                     </div>
@@ -84,14 +84,14 @@ else
 }
 
 @code {
-    private List<UserShowSelection> showSelections;
+    private List<Show> showSelections;
     private string searchText = "";
 
-    private IEnumerable<UserShowSelection> filteredShows =>
+    private IEnumerable<Show> filteredShows =>
         string.IsNullOrWhiteSpace(searchText)
             ? showSelections
-            : showSelections.Where(s => s.show.nameclean != null &&
-                s.show.nameclean.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+            : showSelections.Where(s => s.nameclean != null &&
+                s.nameclean.Contains(searchText, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
@@ -100,7 +100,7 @@ else
 
     private async Task LoadData()
     {
-        showSelections = AppService.ShowData().OrderBy(a => a.show.name).ToList();
+        showSelections = AppService.ShowData().OrderBy(a => a.name).ToList();
     }
 
     private async Task SetFilter(long id, bool stateWanted)

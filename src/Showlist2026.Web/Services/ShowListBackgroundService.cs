@@ -37,7 +37,7 @@ namespace Showlist2026.Services
             hps.shows = _db.Shows.Count();
             hps.episodes = _db.Episodes.Count();
 
-            hps.watchedEpisodes = _db.UserWatchedSelections.Count();
+            hps.watchedEpisodes = _db.Episodes.Count(e => e.Watched);
 
             return hps;
         }
@@ -898,7 +898,6 @@ namespace Showlist2026.Services
                     .Include(s => s.Networks)
                     .Include(s => s.Networks.country)
                     .Include(s => s.WebNetworks.country)
-                    .Include(s => s.UserShowSelections)
                     .ToList();
 
                 List<Timezone> timezonelist = _db.Timezones.ToList();
@@ -909,7 +908,7 @@ namespace Showlist2026.Services
 
                 string rootfolder = _options.TvNameListPath;
 
-                foreach (Show s in slist.Where(sh => sh.UserShowSelections.Any(i => i.include)).OrderByDescending(s => s.updated))
+                foreach (Show s in slist.Where(sh => sh.Wanted == true).OrderByDescending(s => s.updated))
                 {
                     Console.WriteLine($"{s.name}  - {s.DefaultFolderName}");
                     string foundname = null;
@@ -1095,8 +1094,7 @@ namespace Showlist2026.Services
         {
             List<string> foundShowFolder = new List<string>(600000);
             List<TouchFile> foundShowFiles = new (600000);
-            var UserShows = _db.UserShowSelections.Include(a => a.show)
-               .Where(a => a.include).ToList();
+            var UserShows = _db.Shows.Where(s => s.Wanted == true).ToList();
             var dirs = _db.TVDirectories
                 .Where(d => d.DaysToScan != 0)
                 .OrderByDescending(d =>d.MinFileSize)
@@ -1164,17 +1162,17 @@ namespace Showlist2026.Services
 
                 Episode episode = null;
                 Show show = null;
-                UserWatchedSelection watchedselection = null;
+                bool alreadyWatched = false;
                 if (fileinfo != null && fileinfo.DirectoryName != null && fileinfo.DirectoryName.Length > 5)
                 {
                     if (dirsplit.Length >= 2 && dirsplit.Last().ToLower().StartsWith("season "))
                     {
                         String showdir = dirsplit[dirsplit.Length - 2].ToLower();
                         String seasondir = dirsplit.Last().ToLower();
-                        show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.show?.FolderName) && u.show?.FolderName?.ToLower().Trim() == showdir.ToLower().Trim())?.show;
+                        show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.FolderName) && u.FolderName.ToLower().Trim() == showdir.ToLower().Trim());
                         if (show == null)
                         {
-                            show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.show?.name) && u.show.name.ToLower() == showdir.ToLower())?.show;
+                            show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.name) && u.name.ToLower() == showdir.ToLower());
                         }
 
                         // If no show then no point in parsing any more
@@ -1221,11 +1219,10 @@ namespace Showlist2026.Services
                                 }
                                 tf.Episode = episode;
 
-                                watchedselection = _db.UserWatchedSelections
-                                    .FirstOrDefault(w => w.episode.Id == episode.Id);
+                                alreadyWatched = episode.Watched;
                             }
 
-                            if (episode != null && watchedselection == null)
+                            if (episode != null && !alreadyWatched)
                             {
 
                                 string Titletxt = $"{@show.FolderName??show.name}";
@@ -1241,9 +1238,7 @@ namespace Showlist2026.Services
                                 try
                                 {
                                     //This will set the episode to being watched
-                                    // We have not marked the episode as watched for this user yet.
-                                    var item = new UserWatchedSelection() {episode = episode};
-                                    _db.Add(item);
+                                    episode.Watched = true;
                                 }
                                 catch (Exception ex)
                                 {
@@ -1290,8 +1285,7 @@ namespace Showlist2026.Services
         {
             List<string> foundShowFolder = new List<string>(600000);
             List<TouchFile> foundShowFiles = new(600000);
-            var UserShows = _db.UserShowSelections.Include(a => a.show)
-               .Where(a => a.include).ToList();
+            var UserShows = _db.Shows.Where(s => s.Wanted == true).ToList();
 
             var filesToScan = _db.TouchFiles
                 .Include(s => s.Episode)

@@ -31,7 +31,7 @@ else
                         @(" (" + i.country.name + ")")
                     }
                 </div>
-                @if (i.UserNetworkSelections == null || i.UserNetworkSelections.Count == 0)
+                @if (i.Wanted == null)
                 {
                     <div class="col-3">
                         <button class="btn btn-outline-secondary btn-sm" title="Always include show if the network is @i.name"
@@ -46,7 +46,7 @@ else
                         </button>
                     </div>
                 }
-                else if (i.UserNetworkSelections.First().include)
+                else if (i.Wanted == true)
                 {
                     <div class="col-3">
                         <button class="btn btn-success btn-sm" title="Click to remove the always included filter"

@@ -37,8 +37,12 @@ namespace Showlist2026.Entities
 
 
         public ICollection<Genre>? Genres { get; set; }
-        public ICollection<UserShowSelection>? UserShowSelections { get; set; }
 
+        /// <summary>
+        /// null = undecided, true = wanted, false = explicitly excluded
+        /// </summary>
+        public bool? Wanted { get; set; }
+        public int Priority { get; set; }
 
         public string? FolderName { get; set; }
         public string? Notes { get; set; }

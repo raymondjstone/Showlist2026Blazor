@@ -39,7 +39,7 @@
                     }
                 </div>
                 <div class="col-1">
-                    @if (ep.UserWatchedSelections == null || ep.UserWatchedSelections.Count == 0)
+                    @if (!ep.Watched)
                     {
                         <i class="far fa-eye" title="Mark as watched" role="button"
                            @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, true))">
@@ -64,7 +64,7 @@
             @* ── Mobile card (hidden on desktop) ── *@
             <div class="d-md-none card card-body p-2 mb-1">
                 <div class="d-flex align-items-center gap-2">
-                    @if (ep.UserWatchedSelections == null || ep.UserWatchedSelections.Count == 0)
+                    @if (!ep.Watched)
                     {
                         <i class="far fa-eye" title="Mark as watched" role="button"
                            @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, true))"></i>

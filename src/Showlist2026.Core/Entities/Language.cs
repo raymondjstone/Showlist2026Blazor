@@ -14,7 +14,7 @@ namespace Showlist2026.Entities
         public string? name { get; set; }
 
 
-        public ICollection<UserLanguageSelection>? UserLanguageSelections { get; set; }
+        public bool? Wanted { get; set; }
 
     }
 }

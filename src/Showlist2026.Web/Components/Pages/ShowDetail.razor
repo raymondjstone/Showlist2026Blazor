@@ -58,14 +58,7 @@ else
                 {
                     foreach (var g in show.Genres)
                     {
-                        @if (g?.genretext?.UserGenreSelections != null && g.genretext.UserGenreSelections.Count > 0)
-                        {
-                            <FilterButtons Model="@ShowFilter.genreFilter(g.Id, g.genretext.UserGenreSelections.First().include)" OnFilterChanged="HandleFilterChanged" />
-                        }
-                        else
-                        {
-                            <FilterButtons Model="@ShowFilter.genreFilter(g.Id, null)" OnFilterChanged="HandleFilterChanged" />
-                        }
+                        <FilterButtons Model="@ShowFilter.genreFilter(g.Id, g?.genretext?.Wanted)" OnFilterChanged="HandleFilterChanged" />
                         @(g.genretext.genre + ", ")
                     }
                     <br />
@@ -321,110 +314,59 @@ else
 
         ShowFilter = new EpFilter(TvSites);
 
-        if (show.UserShowSelections == null)
-            show.UserShowSelections = new List<UserShowSelection>();
-        if (show.Networks != null && show.Networks.UserNetworkSelections == null)
-        {
-            show.Networks.UserNetworkSelections = new List<UserNetworkSelection>();
-            if (show.Networks.country != null && show.Networks.country.UserCountrySelections == null)
-                show.Networks.country.UserCountrySelections = new List<UserCountrySelection>();
-        }
-        if (show.WebNetworks != null && show.WebNetworks.UserWebNetworkSelections == null)
-        {
-            show.WebNetworks.UserWebNetworkSelections = new List<UserWebNetworkSelection>();
-            if (show.WebNetworks.country != null && show.WebNetworks.country.UserCountrySelections == null)
-                show.WebNetworks.country.UserCountrySelections = new List<UserCountrySelection>();
-        }
-        if (show.Types?.UserTypeSelections == null && show.Types != null)
-            show.Types.UserTypeSelections = new List<UserTypeSelection>();
-
         if (show.Episodes != null && show.Episodes.Count > 0)
             ShowFilter.ep = show.Episodes.FirstOrDefault();
 
-        // Set filter states from user selections
-        if (show.UserShowSelections != null)
+        // Set filter states from Wanted property on entities
+        if (show.Wanted != null)
         {
-            var showf = show.UserShowSelections.FirstOrDefault(f => f.show.Id == show.Id);
-            if (showf != null)
-            {
-                ShowFilter.showinclude = showf.include;
-                ShowFilter.Activelyselected = showf.include;
-                ShowFilter.Activelyignored = !showf.include;
-            }
+            ShowFilter.showinclude = show.Wanted.Value;
+            ShowFilter.Activelyselected = show.Wanted.Value;
+            ShowFilter.Activelyignored = !show.Wanted.Value;
         }
-        if (show.Types?.UserTypeSelections != null)
+        if (show.Types?.Wanted != null)
         {
-            var typef = show.Types.UserTypeSelections.FirstOrDefault(f => f.type.Id == show.Types.Id);
-            if (typef != null)
-            {
-                ShowFilter.typeinclude = typef.include;
-                if (typef.include) ShowFilter.Activelyselected = true;
-                else ShowFilter.Activelyignored = true;
-            }
+            ShowFilter.typeinclude = show.Types.Wanted.Value;
+            if (show.Types.Wanted.Value) ShowFilter.Activelyselected = true;
+            else ShowFilter.Activelyignored = true;
         }
-        if (show.Networks?.UserNetworkSelections != null)
+        if (show.Networks?.Wanted != null)
         {
-            var x = show.Networks.UserNetworkSelections.FirstOrDefault(f => f.network.Id == show.Networks.Id);
-            if (x != null)
-            {
-                ShowFilter.networkinclude = x.include;
-                if (x.include) ShowFilter.Activelyselected = true;
-                else ShowFilter.Activelyignored = true;
-            }
+            ShowFilter.networkinclude = show.Networks.Wanted.Value;
+            if (show.Networks.Wanted.Value) ShowFilter.Activelyselected = true;
+            else ShowFilter.Activelyignored = true;
         }
-        if (show.WebNetworks?.UserWebNetworkSelections != null)
+        if (show.WebNetworks?.Wanted != null)
         {
-            var x = show.WebNetworks.UserWebNetworkSelections.FirstOrDefault(f => f.webnetwork.Id == show.WebNetworks.Id);
-            if (x != null)
-            {
-                ShowFilter.webnetworkinclude = x.include;
-                if (x.include) ShowFilter.Activelyselected = true;
-                else ShowFilter.Activelyignored = true;
-            }
+            ShowFilter.webnetworkinclude = show.WebNetworks.Wanted.Value;
+            if (show.WebNetworks.Wanted.Value) ShowFilter.Activelyselected = true;
+            else ShowFilter.Activelyignored = true;
         }
-        if (show.Languages?.UserLanguageSelections != null)
+        if (show.Languages?.Wanted != null)
         {
-            var x = show.Languages.UserLanguageSelections.FirstOrDefault(f => f.language.Id == show.Languages.Id);
-            if (x != null)
-            {
-                ShowFilter.languageinclude = x.include;
-                if (x.include) ShowFilter.Activelyselected = true;
-                else ShowFilter.Activelyignored = true;
-            }
+            ShowFilter.languageinclude = show.Languages.Wanted.Value;
+            if (show.Languages.Wanted.Value) ShowFilter.Activelyselected = true;
+            else ShowFilter.Activelyignored = true;
         }
-        if (show.Networks?.country?.UserCountrySelections != null)
+        if (show.Networks?.country?.Wanted != null)
         {
-            var x = show.Networks.country.UserCountrySelections.FirstOrDefault(f => f.country.Id == show.Networks.country.Id);
-            if (x != null)
-            {
-                ShowFilter.countryinclude = x.include;
-                if (x.include) ShowFilter.Activelyselected = true;
-                else ShowFilter.Activelyignored = true;
-            }
+            ShowFilter.countryinclude = show.Networks.country.Wanted.Value;
+            if (show.Networks.country.Wanted.Value) ShowFilter.Activelyselected = true;
+            else ShowFilter.Activelyignored = true;
         }
-        if (show.WebNetworks?.country?.UserCountrySelections != null)
+        if (show.WebNetworks?.country?.Wanted != null)
         {
-            var x = show.WebNetworks.country.UserCountrySelections.FirstOrDefault(f => f.country.Id == show.WebNetworks.country.Id);
-            if (x != null)
-            {
-                if (ShowFilter.countryinclude == null) ShowFilter.countryinclude = x.include;
-                if (x.include) ShowFilter.Activelyselected = true;
-                else ShowFilter.Activelyignored = true;
-            }
+            if (ShowFilter.countryinclude == null) ShowFilter.countryinclude = show.WebNetworks.country.Wanted.Value;
+            if (show.WebNetworks.country.Wanted.Value) ShowFilter.Activelyselected = true;
+            else ShowFilter.Activelyignored = true;
         }
         if (show.Genres != null)
         {
-            foreach (var g in show.Genres.Where(a => a.genretext?.UserGenreSelections != null))
+            foreach (var g in show.Genres.Where(a => a.genretext?.Wanted != null))
             {
-                if (g.genretext.UserGenreSelections == null)
-                    g.genretext.UserGenreSelections = new List<UserGenreSelection>();
-                var x = g.genretext.UserGenreSelections.FirstOrDefault(f => f.genretext.Id == g.genretext.Id);
-                if (x != null)
-                {
-                    if (ShowFilter.genreinclude == null) ShowFilter.genreinclude = x.include;
-                    if (x.include) ShowFilter.Activelyselected = true;
-                    else ShowFilter.Activelyignored = true;
-                }
+                if (ShowFilter.genreinclude == null) ShowFilter.genreinclude = g.genretext.Wanted.Value;
+                if (g.genretext.Wanted.Value) ShowFilter.Activelyselected = true;
+                else ShowFilter.Activelyignored = true;
             }
         }
 
@@ -459,12 +401,12 @@ else
         // NZB search
         try
         {
-            if (show.Episodes != null && show.Episodes.Any(f => (f.UserWatchedSelections?.Count ?? 0) == 0))
+            if (show.Episodes != null && show.Episodes.Any(f => !f.Watched))
             {
                 NZBFound = await AppService.NZBPlanetSearch(show);
                 if (NZBFound?.Channel?.Item != null)
                 {
-                    var unwatched = show.Episodes.Where(f => (f.UserWatchedSelections?.Count ?? 0) == 0).Select(f => f.EpNumberFormatted);
+                    var unwatched = show.Episodes.Where(f => !f.Watched).Select(f => f.EpNumberFormatted);
                     NZBFound.Channel.Item = NZBFound.Channel.Item
                         .Where(z => unwatched.Any(u => u == z.EpNumberFormatted))
                         .OrderByDescending(e => e.EpNumberFormatted)
@@ -480,7 +422,7 @@ else
             .Where(s => s.name == show.name && s.showid != show.showid).ToList();
 
         showNotes = show.Notes ?? "";
-        showPriority = show.UserShowSelections?.FirstOrDefault()?.Priority ?? 0;
+        showPriority = show.Priority;
         notesSaved = false;
         try { similarShows = AppService.GetSimilarShows(show.Id, 5); } catch { similarShows = new(); }
     }

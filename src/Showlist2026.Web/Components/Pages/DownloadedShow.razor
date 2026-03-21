@@ -45,7 +45,7 @@
                     }
                 </div>
                 <div class="col-1">
-                    @if (s.Episode?.UserWatchedSelections != null && s.Episode.UserWatchedSelections.Any())
+                    @if (s.Episode?.Watched == true)
                     {
                         <span>UnWatched</span>
                     }

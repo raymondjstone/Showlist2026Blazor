@@ -30,14 +30,7 @@
                                 {
                                     foreach (var g in show.Genres)
                                     {
-                                        @if (g?.genretext?.UserGenreSelections != null && g.genretext.UserGenreSelections.Count > 0)
-                                        {
-                                            <FilterButtons Model="@ShowFilter.genreFilter(g.Id, g.genretext.UserGenreSelections.First().include)" OnFilterChanged="OnFilterChanged" />
-                                        }
-                                        else
-                                        {
-                                            <FilterButtons Model="@ShowFilter.genreFilter(g.Id, null)" OnFilterChanged="OnFilterChanged" />
-                                        }
+                                        <FilterButtons Model="@ShowFilter.genreFilter(g.Id, g?.genretext?.Wanted)" OnFilterChanged="OnFilterChanged" />
                                         @(g.genretext.genre + ", ")
                                     }
                                     <br />

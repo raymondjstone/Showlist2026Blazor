@@ -26,7 +26,7 @@ else
                 <div class="col-2">
                     @i.code
                 </div>
-                @if (i.UserCountrySelections == null || i.UserCountrySelections.Count == 0)
+                @if (i.Wanted == null)
                 {
                     <div class="col-3">
                         <button class="btn btn-outline-secondary btn-sm" title="Always include show if the country is @i.name"
@@ -41,7 +41,7 @@ else
                         </button>
                     </div>
                 }
-                else if (i.UserCountrySelections.First().include)
+                else if (i.Wanted == true)
                 {
                     <div class="col-3">
                         <button class="btn btn-success btn-sm" title="Click to remove the always included filter"

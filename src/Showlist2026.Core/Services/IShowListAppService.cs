@@ -19,7 +19,7 @@ namespace Showlist2026.Services
         List<Show> NoFolderList();
         Show ShowPageData(long id);
         List<TVSite> TvSites();
-        List<UserShowSelection> ShowData();
+        List<Show> ShowData();
         List<Country> CountryData();
         List<Language> LanguageData();
         List<Showlist2026.Entities.Type> TypeData();
@@ -37,7 +37,6 @@ namespace Showlist2026.Services
         Task<bool> WatchedFilter(long id, bool statewanted);
         Task<bool> SeasonWatchedFilter(long id, long season, bool statewanted);
         Task<bool> GivenUpFilter(long id, bool statewanted);
-        HashSet<int> GivenUpEpisodeIds();
         List<EpFilter> MissedEpisodes();
         List<EpFilter> GivenUpEpisodes();
         Task<bool> SetFolderName(long id, string foldername);
