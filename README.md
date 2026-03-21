@@ -285,7 +285,6 @@ Managed by Hangfire. Status is visible on the home page and at `/hangfire`.
 | PopulateShowFolderNames | Every 3 hours at :25 | Matches selected shows to folders on disk |
 | ShowDownloadedJob | Every 10 minutes | Scans TV directories for new downloads, sends notifications |
 | NewSeasonNotifications | Daily at 8:00 AM | Notifies when a new season starts for selected shows |
-| CleanNotifications | Every hour at :55 | Notification cleanup |
 
 ## Export / Import
 

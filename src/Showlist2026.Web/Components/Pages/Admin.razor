@@ -70,9 +70,6 @@
                     <button class="btn btn-outline-info w-100 mb-2" @onclick="TestEmail" disabled="@isRunning">
                         <i class="fas fa-envelope"></i> Test Email
                     </button>
-                    <button class="btn btn-info w-100 mb-2" @onclick="CleanNotifications" disabled="@isRunning">
-                        <i class="fas fa-broom"></i> Clean Notifications
-                    </button>
                 </div>
             </div>
         </div>
@@ -284,8 +281,6 @@
         }
     }
 
-    private async Task CleanNotifications() =>
-        await RunOperation("Clean Notifications", BackgroundService.CleanNotifications);
 
     private async Task ExportData()
     {

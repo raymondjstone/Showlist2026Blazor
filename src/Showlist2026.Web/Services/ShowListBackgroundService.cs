@@ -992,17 +992,6 @@ namespace Showlist2026.Services
         }
 
 
-
-
-        public async Task<bool> CleanNotifications()
-        {
-            // ABP tenant notifications removed - no-op in standalone service
-            return true;
-        }
-
-
-
-
         public int GetEstimatedPageMax()
         {
             double x = (double)_db.Shows.Max(a => a.showid);

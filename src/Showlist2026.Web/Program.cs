@@ -101,8 +101,6 @@ RecurringJob.AddOrUpdate<IShowListBackgroundService>(
     "RefreshShowDates", s => s.RefreshShowDates(), "06 * * * *");
 RecurringJob.AddOrUpdate<IShowListAppService>(
     "NewSeasonNotifications", s => s.CheckNewSeasonNotifications(), "0 8 * * *");
-RecurringJob.AddOrUpdate<IShowListBackgroundService>(
-    "CleanNotifications", s => s.CleanNotifications(), "55 * * * *");
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

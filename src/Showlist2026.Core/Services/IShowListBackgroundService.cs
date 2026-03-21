@@ -17,7 +17,6 @@ namespace Showlist2026.Services
         Task<bool> RefreshShowDates();
         Task<bool> PopulateShowFolderNames();
         Task<bool> BacklogPage();
-        Task<bool> CleanNotifications();
         Task<bool> Notificationtest();
         int GetEstimatedPageMax();
         Task<bool> ShowDownloadedJob();
