@@ -39,17 +39,22 @@
                     }
                 </div>
                 <div class="col-1">
-                    @if (!ep.Watched)
+                    @if (ep.GivenUp)
                     {
-                        <i class="far fa-eye" title="Mark as watched" role="button"
-                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, true))">
-                        </i>
+                        <i class="fas fa-flag text-danger" title="Given up — click to undo" role="button"
+                           @onclick="() => OnGivenUpChanged.InvokeAsync((ep.Id, false))"></i>
+                    }
+                    else if (ep.Watched)
+                    {
+                        <i class="fas fa-trash-restore" title="Mark as NOT watched" role="button"
+                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, false))"></i>
                     }
                     else
                     {
-                        <i class="fas fa-trash-restore" title="Mark as NOT watched" role="button"
-                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, false))">
-                        </i>
+                        <i class="far fa-eye" title="Mark as watched" role="button"
+                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, true))"></i>
+                        <i class="fas fa-flag text-muted ms-1" title="Give up this episode" role="button"
+                           @onclick="() => OnGivenUpChanged.InvokeAsync((ep.Id, true))"></i>
                     }
                     @(ep.EpNumberFormatted)
                 </div>
@@ -64,15 +69,22 @@
             @* ── Mobile card (hidden on desktop) ── *@
             <div class="d-md-none card card-body p-2 mb-1">
                 <div class="d-flex align-items-center gap-2">
-                    @if (!ep.Watched)
+                    @if (ep.GivenUp)
                     {
-                        <i class="far fa-eye" title="Mark as watched" role="button"
-                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, true))"></i>
+                        <i class="fas fa-flag text-danger" title="Given up — click to undo" role="button"
+                           @onclick="() => OnGivenUpChanged.InvokeAsync((ep.Id, false))"></i>
                     }
-                    else
+                    else if (ep.Watched)
                     {
                         <i class="fas fa-trash-restore" title="Mark as NOT watched" role="button"
                            @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, false))"></i>
+                    }
+                    else
+                    {
+                        <i class="far fa-eye" title="Mark as watched" role="button"
+                           @onclick="() => OnWatchedChanged.InvokeAsync((ep.Id, true))"></i>
+                        <i class="fas fa-flag text-muted ms-1" title="Give up this episode" role="button"
+                           @onclick="() => OnGivenUpChanged.InvokeAsync((ep.Id, true))"></i>
                     }
                     <span class="fw-semibold">@ep.EpNumberFormatted</span>
                     <span>@ep.name</span>
@@ -91,5 +103,6 @@
 @code {
     [Parameter] public List<Episode> Episodes { get; set; }
     [Parameter] public EventCallback<(long id, bool state)> OnWatchedChanged { get; set; }
+    [Parameter] public EventCallback<(long id, bool state)> OnGivenUpChanged { get; set; }
     [Parameter] public EventCallback<(long seasonId, long season, bool state)> OnSeasonWatchedChanged { get; set; }
 }

@@ -28,7 +28,7 @@ else
         </div>
         @foreach (var ep in episodes)
         {
-            <EpisodeRow Episode="ep" OnFilterChanged="HandleFilterChanged" OnWatchedChanged="HandleWatchedChanged" OnGivenUpChanged="HandleGivenUpChanged" />
+            <EpisodeRow Episode="ep" OnFilterChanged="HandleFilterChanged" OnWatchedChanged="HandleWatchedChanged" OnGivenUpChanged="HandleGivenUpChanged" OnCatchUpShow="HandleCatchUpShow" />
         }
     </div>
 }
@@ -70,6 +70,12 @@ else
     private async Task HandleGivenUpChanged((long id, bool state) args)
     {
         await AppService.GivenUpFilter(args.id, args.state);
+        await LoadData();
+    }
+
+    private async Task HandleCatchUpShow(long showId)
+    {
+        await AppService.CatchUpShow(showId);
         await LoadData();
     }
 }

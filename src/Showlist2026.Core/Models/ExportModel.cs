@@ -25,4 +25,22 @@ namespace Showlist2026.Models
         public long? Season { get; set; }
         public long? EpisodeNumber { get; set; }
     }
+
+    public class ImportPathsPreview
+    {
+        public List<ImportPathsShowMatch> MatchedShows { get; set; } = new();
+        public List<string> UnmatchedFolders { get; set; } = new();
+        public int LinesSkipped { get; set; }
+        public int TotalEpisodes { get; set; }
+    }
+
+    public class ImportPathsShowMatch
+    {
+        public int ShowId { get; set; }
+        public string FolderName { get; set; } = "";
+        public string ShowName { get; set; } = "";
+        public int EpisodeCount { get; set; }
+        public string EpisodeRange { get; set; } = "";
+        public bool AlreadyWanted { get; set; }
+    }
 }

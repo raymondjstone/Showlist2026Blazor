@@ -13,7 +13,7 @@
                             <div class="col-9">
                                 <h2>
                                     <FilterButtons Model="@ShowFilter.showFilter" OnFilterChanged="OnFilterChanged" />
-                                    <a href="/showlist/show/@show.Id">@show.name</a>
+                                    <a href="/showlist/show/@show.Id" target="_blank">@show.name</a>
                                     <i role="button" class="far fa-clipboard"
                                        title="@show.regexp"
                                        data-copy="@show.regexp"></i>
@@ -73,13 +73,11 @@
                             </div>
                         </div>
 
-                        @if (show.nextEpisode != null)
+                        @if (show.Episodes != null && show.Episodes.Count > 0)
                         {
-                            <div class="row">
-                                <div class="col-6">
-                                    <b>Next Episode</b>
-                                </div>
-                            </div>
+                            var firstEp = show.Episodes.OrderBy(e => e.AiringTime).First();
+                            var lastEp = show.Episodes.OrderByDescending(e => e.AiringTime).First();
+
                             <div class="row fw-bold">
                                 <div class="col-1">Date</div>
                                 <div class="col-1">Episode</div>
@@ -88,21 +86,29 @@
                             </div>
                             <div class="row bg-light">
                                 <div class="col-1">
-                                    @if (show.nextEpisode.AirDateOffset2 != null)
+                                    @if (firstEp.AirDateOffset2 != null)
                                     {
-                                        @(((DateTimeOffset)show.nextEpisode.AiringTime).Date.ToString("dd MMM yyyy"))
+                                        @(((DateTimeOffset)firstEp.AiringTime).Date.ToString("dd MMM yyyy"))
                                     }
                                 </div>
-                                <div class="col-1">
-                                    @(show.nextEpisode.EpNumberFormatted)
-                                </div>
-                                <div class="col-3">
-                                    @show.nextEpisode.nameclean
-                                </div>
-                                <div class="col-7">
-                                    @((MarkupString)show.nextEpisode.summaryclean)
-                                </div>
+                                <div class="col-1">@firstEp.EpNumberFormatted</div>
+                                <div class="col-3">@firstEp.nameclean</div>
+                                <div class="col-7">@((MarkupString)firstEp.summaryclean)</div>
                             </div>
+                            @if (firstEp.Id != lastEp.Id)
+                            {
+                                <div class="row bg-light">
+                                    <div class="col-1">
+                                        @if (lastEp.AirDateOffset2 != null)
+                                        {
+                                            @(((DateTimeOffset)lastEp.AiringTime).Date.ToString("dd MMM yyyy"))
+                                        }
+                                    </div>
+                                    <div class="col-1">@lastEp.EpNumberFormatted</div>
+                                    <div class="col-3">@lastEp.nameclean</div>
+                                    <div class="col-7">@((MarkupString)lastEp.summaryclean)</div>
+                                </div>
+                            }
                         }
                     </div>
                 </div>

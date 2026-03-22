@@ -19,6 +19,11 @@
             <i role="button" class="far fa-clipboard"
                 title="@Episode.ep.show.regexp"
                 data-copy="@Episode.ep.show.regexp"></i>
+            @if (OnCatchUpShow.HasDelegate)
+            {
+                <a role="button" class="text-success ms-1" title="Catch up all missed for this show"
+                   @onclick="() => OnCatchUpShow.InvokeAsync(Episode.ep.show.Id)"><i class="fas fa-check-double"></i></a>
+            }
             @if (string.IsNullOrEmpty(Episode.ep.show.FolderName))
             {
                 <a href="/showlist/show/@(Episode.ep.show.Id)?setfoldername=true" target="_blank" title="Create Folder name">
@@ -131,6 +136,11 @@
                     <a href="/showlist/show/@Episode.ep.show.Id" target="_blank" class="fw-bold">
                         @Episode.ep.show.name
                     </a>
+                    @if (OnCatchUpShow.HasDelegate)
+                    {
+                        <a role="button" class="text-success ms-1" title="Catch up all missed for this show"
+                           @onclick="() => OnCatchUpShow.InvokeAsync(Episode.ep.show.Id)"><i class="fas fa-check-double"></i></a>
+                    }
                     @{
                         var mobileStatusClass = Episode.ep.show.status?.ToLower() switch
                         {
@@ -183,5 +193,6 @@
     [Parameter] public EventCallback<(long id, string type, bool? state)> OnFilterChanged { get; set; }
     [Parameter] public EventCallback<(long id, bool state)> OnWatchedChanged { get; set; }
     [Parameter] public EventCallback<(long id, bool state)> OnGivenUpChanged { get; set; }
+    [Parameter] public EventCallback<long> OnCatchUpShow { get; set; }
 
 }

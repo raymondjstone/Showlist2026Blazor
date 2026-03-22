@@ -1,8 +1,8 @@
-@page "/missed-shows"
+@page "/undecided"
 @rendermode InteractiveServer
 @inject IShowListAppService AppService
 
-<PageTitle>Missed Shows</PageTitle>
+<PageTitle>Undecided</PageTitle>
 
 @if (Tabs == null)
 {
@@ -23,7 +23,7 @@ else
                 <i class="far fa-times-circle"></i> Exclude All on Tab
             </button>
         </div>
-        <ul class="nav nav-tabs flex-wrap" id="missedShowsTabs" role="tablist">
+        <ul class="nav nav-tabs flex-wrap" id="undecidedTabs" role="tablist">
             @foreach (var tab in Tabs)
             {
                 <li class="nav-item" role="presentation">
@@ -35,7 +35,7 @@ else
                 </li>
             }
         </ul>
-        <div class="tab-content" id="missedShowsTabContent">
+        <div class="tab-content" id="undecidedTabContent">
             @foreach (var tab in Tabs)
             {
                 @if (activeTab == tab._TabId)

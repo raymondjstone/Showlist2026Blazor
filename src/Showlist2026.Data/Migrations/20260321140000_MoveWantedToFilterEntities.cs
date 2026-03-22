@@ -10,6 +10,12 @@ namespace Showlist2026.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Drop WatchedHistory table if it exists
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'WatchedHistory')
+                DROP TABLE [dbo].[WatchedHistory];
+            ");
+
             // Add Wanted column to Country
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Country') AND name = 'Wanted')

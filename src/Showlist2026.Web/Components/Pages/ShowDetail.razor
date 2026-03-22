@@ -127,7 +127,7 @@ else
                     foreach (var sd in showWithSameName)
                     {
                         <br />
-                        <a href="/showlist/show/@sd.Id" target="_blank">@sd.name [@sd.FolderName]</a>
+                        <a href="/showlist/show/@sd.Id" target="_blank">@sd.name [@(sd.FolderName ?? sd.DefaultFolderName)]</a>
                     }
                 }
             </div>
@@ -155,9 +155,23 @@ else
                     }
                 </div>
                 <div class="col-1">
-                    <i class="far fa-eye" title="Mark as watched" role="button"
-                       @onclick="() => HandleWatchedChanged((nextEpisode.Id, true))">
-                    </i>
+                    @if (nextEpisode.GivenUp)
+                    {
+                        <i class="fas fa-flag text-danger" title="Given up — click to undo" role="button"
+                           @onclick="() => HandleGivenUpChanged((nextEpisode.Id, false))"></i>
+                    }
+                    else if (!nextEpisode.Watched)
+                    {
+                        <i class="far fa-eye" title="Mark as watched" role="button"
+                           @onclick="() => HandleWatchedChanged((nextEpisode.Id, true))"></i>
+                        <i class="fas fa-flag text-muted ms-1" title="Give up this episode" role="button"
+                           @onclick="() => HandleGivenUpChanged((nextEpisode.Id, true))"></i>
+                    }
+                    else
+                    {
+                        <i class="fas fa-trash-restore" title="Mark as NOT watched" role="button"
+                           @onclick="() => HandleWatchedChanged((nextEpisode.Id, false))"></i>
+                    }
                     @(nextEpisode.EpNumberFormatted)
                 </div>
                 <div class="col-3">@nextEpisode.nameclean</div>
@@ -167,8 +181,23 @@ else
             @* ── Mobile next episode (hidden on desktop) ── *@
             <div class="d-md-none card card-body p-2 mb-2">
                 <div class="d-flex align-items-center gap-2">
-                    <i class="far fa-eye" title="Mark as watched" role="button"
-                       @onclick="() => HandleWatchedChanged((nextEpisode.Id, true))"></i>
+                    @if (nextEpisode.GivenUp)
+                    {
+                        <i class="fas fa-flag text-danger" title="Given up — click to undo" role="button"
+                           @onclick="() => HandleGivenUpChanged((nextEpisode.Id, false))"></i>
+                    }
+                    else if (!nextEpisode.Watched)
+                    {
+                        <i class="far fa-eye" title="Mark as watched" role="button"
+                           @onclick="() => HandleWatchedChanged((nextEpisode.Id, true))"></i>
+                        <i class="fas fa-flag text-muted ms-1" title="Give up this episode" role="button"
+                           @onclick="() => HandleGivenUpChanged((nextEpisode.Id, true))"></i>
+                    }
+                    else
+                    {
+                        <i class="fas fa-trash-restore" title="Mark as NOT watched" role="button"
+                           @onclick="() => HandleWatchedChanged((nextEpisode.Id, false))"></i>
+                    }
                     <span class="fw-semibold">@nextEpisode.EpNumberFormatted</span>
                     <span>@nextEpisode.nameclean</span>
                 </div>
@@ -204,7 +233,7 @@ else
                 @if (activeSeasonTab == "S" + tab.First().season)
                 {
                     <div class="tab-pane fade show active" role="tabpanel">
-                        <SeasonTab Episodes="tab" OnWatchedChanged="HandleWatchedChanged" OnSeasonWatchedChanged="HandleSeasonWatchedChanged" />
+                        <SeasonTab Episodes="tab" OnWatchedChanged="HandleWatchedChanged" OnGivenUpChanged="HandleGivenUpChanged" OnSeasonWatchedChanged="HandleSeasonWatchedChanged" />
                     </div>
                 }
             }
@@ -418,8 +447,12 @@ else
         }
         catch { }
 
+        var thisFolder = show.FolderName ?? show.DefaultFolderName;
         showWithSameName = AppService.showlist(show.name)
-            .Where(s => s.name == show.name && s.showid != show.showid).ToList();
+            .Where(s => s.showid != show.showid &&
+                (s.name == show.name
+                 || (!string.IsNullOrEmpty(thisFolder) && (s.FolderName ?? s.DefaultFolderName).Equals(thisFolder, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
 
         showNotes = show.Notes ?? "";
         showPriority = show.Priority;
@@ -450,6 +483,12 @@ else
     private async Task HandleWatchedChanged((long id, bool state) args)
     {
         await AppService.WatchedFilter(args.id, args.state);
+        await LoadData();
+    }
+
+    private async Task HandleGivenUpChanged((long id, bool state) args)
+    {
+        await AppService.GivenUpFilter(args.id, args.state);
         await LoadData();
     }
 

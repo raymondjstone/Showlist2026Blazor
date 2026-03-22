@@ -447,27 +447,6 @@ namespace Showlist2026.Data.Migrations
                     b.ToTable("Type", (string)null);
                 });
 
-            modelBuilder.Entity("Showlist2026.Entities.WatchedHistory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTimeOffset>("WatchedDate")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<int>("episodeId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("episodeId");
-
-                    b.ToTable("WatchedHistory", (string)null);
-                });
-
             modelBuilder.Entity("Showlist2026.Entities.WebNetwork", b =>
                 {
                     b.Property<int>("Id")
@@ -576,17 +555,6 @@ namespace Showlist2026.Data.Migrations
                         .HasForeignKey("EpisodeId");
 
                     b.Navigation("Episode");
-                });
-
-            modelBuilder.Entity("Showlist2026.Entities.WatchedHistory", b =>
-                {
-                    b.HasOne("Showlist2026.Entities.Episode", "episode")
-                        .WithMany()
-                        .HasForeignKey("episodeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("episode");
                 });
 
             modelBuilder.Entity("Showlist2026.Entities.WebNetwork", b =>

@@ -76,9 +76,6 @@ namespace Showlist2026.Services
         Task SetShowNotes(long showId, string notes);
         Task SetShowPriority(long showId, int priority);
 
-        // Watch history
-        List<WatchedHistory> GetWatchedHistory(int days = 30);
-
         // Episode counts for show cards
         Dictionary<int, (int watched, int total)> GetEpisodeCountsForShows(List<int> showIds);
 
@@ -104,6 +101,7 @@ namespace Showlist2026.Services
         StorageDashboardModel GetStorageDashboard();
 
         // Import watched shows from file path list
-        Task<(int showsMatched, int episodesMarked, int linesSkipped, List<string> unmatchedFolders)> ImportWatchedFromPaths(string fileContent);
+        ImportPathsPreview PreviewImportWatchedFromPaths(string fileContent);
+        Task<(int showsMatched, int episodesMarked)> CommitImportWatchedFromPaths(string fileContent);
     }
 }

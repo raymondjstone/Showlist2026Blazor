@@ -1228,6 +1228,7 @@ namespace Showlist2026.Services
                                 {
                                     //This will set the episode to being watched
                                     episode.Watched = true;
+                                    if (episode.GivenUp) episode.GivenUp = false;
                                 }
                                 catch (Exception ex)
                                 {

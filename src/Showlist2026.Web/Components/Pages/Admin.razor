@@ -105,27 +105,64 @@
                     <div class="mb-2">
                         <InputFile OnChange="HandleImportPathsFile" class="form-control" accept=".txt,.csv,.log" />
                     </div>
-                    <button class="btn btn-outline-primary w-100" @onclick="ImportPaths" disabled="@(isRunning || string.IsNullOrEmpty(importPathsText))">
-                        <i class="fas fa-file-import"></i> Import Watched Shows
+                    <button class="btn btn-outline-primary w-100" @onclick="PreviewImportPaths" disabled="@(isRunning || string.IsNullOrEmpty(importPathsText))">
+                        <i class="fas fa-search"></i> Preview Matches
                     </button>
-                    @if (importPathsResult != null)
+                    @if (importPathsPreview != null)
                     {
                         <div class="mt-2">
-                            <p class="mb-1"><strong>@importPathsResult.Value.showsMatched</strong> shows marked as wanted</p>
-                            <p class="mb-1"><strong>@importPathsResult.Value.episodesMarked</strong> episodes marked as watched</p>
-                            <p class="mb-1"><strong>@importPathsResult.Value.linesSkipped</strong> lines skipped</p>
-                            @if (importPathsResult.Value.unmatchedFolders.Count > 0)
+                            <p class="mb-1"><strong>@importPathsPreview.MatchedShows.Count</strong> shows matched, <strong>@importPathsPreview.TotalEpisodes</strong> episodes found, <strong>@importPathsPreview.LinesSkipped</strong> lines skipped</p>
+
+                            @if (importPathsPreview.MatchedShows.Count > 0)
                             {
-                                <details>
-                                    <summary class="text-warning">@importPathsResult.Value.unmatchedFolders.Count unmatched folders</summary>
+                                <div style="max-height:300px;overflow-y:auto;" class="mb-2">
+                                    <table class="table table-sm table-striped mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Folder</th>
+                                                <th>Matched Show</th>
+                                                <th>Episodes</th>
+                                                <th>Range</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var m in importPathsPreview.MatchedShows)
+                                            {
+                                                <tr>
+                                                    <td class="small">@m.FolderName</td>
+                                                    <td><a href="/showlist/show/@m.ShowId" target="_blank">@m.ShowName</a></td>
+                                                    <td>@m.EpisodeCount</td>
+                                                    <td class="small">@m.EpisodeRange</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <button class="btn btn-success w-100" @onclick="CommitImportPaths" disabled="@isRunning">
+                                    <i class="fas fa-check"></i> Confirm &amp; Import @importPathsPreview.MatchedShows.Count Shows
+                                </button>
+                            }
+
+                            @if (importPathsPreview.UnmatchedFolders.Count > 0)
+                            {
+                                <details class="mt-2">
+                                    <summary class="text-warning">@importPathsPreview.UnmatchedFolders.Count unmatched folders</summary>
                                     <ul class="list-group mt-1" style="max-height:200px;overflow-y:auto;">
-                                        @foreach (var f in importPathsResult.Value.unmatchedFolders.OrderBy(x => x))
+                                        @foreach (var f in importPathsPreview.UnmatchedFolders)
                                         {
                                             <li class="list-group-item list-group-item-warning py-1 small">@f</li>
                                         }
                                     </ul>
                                 </details>
                             }
+                        </div>
+                    }
+                    @if (importPathsCommitResult != null)
+                    {
+                        <div class="alert alert-success mt-2 mb-0">
+                            Import complete: <strong>@importPathsCommitResult.Value.showsMatched</strong> shows marked as wanted,
+                            <strong>@importPathsCommitResult.Value.episodesMarked</strong> episodes marked as watched.
                         </div>
                     }
                 </div>
@@ -183,7 +220,8 @@
     private bool isRunning;
     private string importJson;
     private string importPathsText;
-    private (int showsMatched, int episodesMarked, int linesSkipped, List<string> unmatchedFolders)? importPathsResult;
+    private ImportPathsPreview importPathsPreview;
+    private (int showsMatched, int episodesMarked)? importPathsCommitResult;
 
     private async Task RunOperation(string name, Func<Task<bool>> operation)
     {
@@ -364,24 +402,50 @@
         var file = e.File;
         using var reader = new StreamReader(file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024));
         importPathsText = await reader.ReadToEndAsync();
-        importPathsResult = null;
-        StatusMessage($"File loaded ({file.Name}, {file.Size:N0} bytes). Click Import Watched Shows to proceed.", false);
+        importPathsPreview = null;
+        importPathsCommitResult = null;
+        StatusMessage($"File loaded ({file.Name}, {file.Size:N0} bytes). Click Preview Matches to continue.", false);
     }
 
-    private async Task ImportPaths()
+    private void PreviewImportPaths()
     {
         if (string.IsNullOrEmpty(importPathsText)) return;
 
         isRunning = true;
         StatusMessage(null, false);
-        importPathsResult = null;
+        importPathsPreview = null;
+        importPathsCommitResult = null;
         StateHasChanged();
 
         try
         {
-            importPathsResult = await AppService.ImportWatchedFromPaths(importPathsText);
-            StatusMessage($"Import completed. {importPathsResult.Value.showsMatched} shows matched, {importPathsResult.Value.episodesMarked} episodes marked watched.", false);
+            importPathsPreview = AppService.PreviewImportWatchedFromPaths(importPathsText);
+            StatusMessage($"Preview ready. {importPathsPreview.MatchedShows.Count} shows matched. Review the list and click Confirm to import.", false);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage($"Preview failed: {ex.Message}", true);
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private async Task CommitImportPaths()
+    {
+        if (string.IsNullOrEmpty(importPathsText)) return;
+
+        isRunning = true;
+        StatusMessage(null, false);
+        StateHasChanged();
+
+        try
+        {
+            importPathsCommitResult = await AppService.CommitImportWatchedFromPaths(importPathsText);
+            StatusMessage($"Import completed. {importPathsCommitResult.Value.showsMatched} shows, {importPathsCommitResult.Value.episodesMarked} episodes.", false);
             importPathsText = null;
+            importPathsPreview = null;
         }
         catch (Exception ex)
         {

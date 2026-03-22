@@ -42,9 +42,12 @@ else
                     }
                     <span class="badge @statusClass">@s.status</span>
                 </div>
-                <div class="col-1">
+                <div class="col-3">
+                    <button class="btn btn-sm btn-outline-success me-1" title="Use default name" @onclick="() => UseDefaultName(s)">
+                        <i class="fas fa-check"></i>
+                    </button>
                     <button class="btn btn-sm btn-outline-primary" @onclick="() => ShowFolderModal(s)">
-                        <i class="fa fa-plus-square"></i> Set Folder
+                        <i class="fa fa-plus-square"></i> Custom
                     </button>
                 </div>
             </div>
@@ -74,6 +77,13 @@ else
     private void ShowFolderModal(Show show)
     {
         selectedShow = show;
+    }
+
+    private async Task UseDefaultName(Show show)
+    {
+        var name = show.SuggestedFolderName ?? show.DefaultFolderName;
+        await AppService.SetFolderName(show.Id, name);
+        await LoadData();
     }
 
     private async Task HandleFolderNameChanged((long id, string name) args)
