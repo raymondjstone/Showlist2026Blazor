@@ -173,6 +173,20 @@
     <div class="row g-3 mt-2">
         <div class="col-md-6">
             <div class="card">
+                <div class="card-header">Full Directory Scan</div>
+                <div class="card-body">
+                    <p class="text-muted small">Scan a directory with no file-size or date filters, applying the same actions as the downloaded-show job (notifications, mark watched, touch files).</p>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" placeholder="e.g. D:\TV Shows\Some Show" @bind="scanDirectory" />
+                    </div>
+                    <button class="btn btn-warning w-100" @onclick="RunFullDirectoryScan" disabled="@(isRunning || string.IsNullOrEmpty(scanDirectory))">
+                        <i class="fas fa-folder-open"></i> Scan Directory
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
                 <div class="card-header">Duplicate Detection</div>
                 <div class="card-body">
                     <button class="btn btn-warning w-100 mb-2" @onclick="FindDuplicates" disabled="@isRunning">
@@ -382,6 +396,11 @@
         statusMessage = msg;
         isError = error;
     }
+
+    private string scanDirectory;
+
+    private async Task RunFullDirectoryScan() =>
+        await RunOperation("Full Directory Scan", () => BackgroundService.ScanDirectoryFull(scanDirectory));
 
     private List<Show> duplicateShows;
 

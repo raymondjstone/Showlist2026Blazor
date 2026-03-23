@@ -141,6 +141,7 @@ namespace Showlist2026.Models
         public int EpisodesBehind;
         public int TotalAiredEpisodes;
         public int TotalWatchedEpisodes;
+        public int TotalGivenUpEpisodes;
         public int ShowPriority;
         public List<TVSite> TvSites;
         public EpFilter(List<TVSite> TVSites)

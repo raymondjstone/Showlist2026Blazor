@@ -84,9 +84,11 @@ else
                                 <div class="col-1 d-flex align-items-center gap-1">
                                     @if (ep.TotalAiredEpisodes > 0)
                                     {
-                                        var pct = ep.TotalAiredEpisodes > 0 ? (int)(100.0 * ep.TotalWatchedEpisodes / ep.TotalAiredEpisodes) : 0;
-                                        <div class="progress progress-thin flex-grow-1" title="@ep.TotalWatchedEpisodes / @ep.TotalAiredEpisodes watched">
-                                            <div class="progress-bar bg-success" style="width: @(pct)%"></div>
+                                        var pctWatched = (int)(100.0 * (ep.TotalWatchedEpisodes - ep.TotalGivenUpEpisodes) / ep.TotalAiredEpisodes);
+                                        var pctGivenUp = (int)(100.0 * ep.TotalGivenUpEpisodes / ep.TotalAiredEpisodes);
+                                        <div class="progress progress-thin flex-grow-1" title="@(ep.TotalWatchedEpisodes - ep.TotalGivenUpEpisodes) watched, @ep.TotalGivenUpEpisodes given up / @ep.TotalAiredEpisodes aired">
+                                            <div class="progress-bar bg-success" style="width: @(pctWatched)%"></div>
+                                            <div class="progress-bar bg-danger" style="width: @(pctGivenUp)%"></div>
                                         </div>
                                         <small class="text-muted text-nowrap">@ep.TotalWatchedEpisodes/@ep.TotalAiredEpisodes</small>
                                     }
@@ -189,9 +191,11 @@ else
                                         <div class="d-flex align-items-center gap-2 small mt-1">
                                             @if (ep.TotalAiredEpisodes > 0)
                                             {
-                                                var mPct = ep.TotalAiredEpisodes > 0 ? (int)(100.0 * ep.TotalWatchedEpisodes / ep.TotalAiredEpisodes) : 0;
-                                                <div class="progress progress-thin flex-grow-1" style="max-width:120px;" title="@ep.TotalWatchedEpisodes / @ep.TotalAiredEpisodes watched">
-                                                    <div class="progress-bar bg-success" style="width: @(mPct)%"></div>
+                                                var mPctWatched = (int)(100.0 * (ep.TotalWatchedEpisodes - ep.TotalGivenUpEpisodes) / ep.TotalAiredEpisodes);
+                                                var mPctGivenUp = (int)(100.0 * ep.TotalGivenUpEpisodes / ep.TotalAiredEpisodes);
+                                                <div class="progress progress-thin flex-grow-1" style="max-width:120px;" title="@(ep.TotalWatchedEpisodes - ep.TotalGivenUpEpisodes) watched, @ep.TotalGivenUpEpisodes given up / @ep.TotalAiredEpisodes aired">
+                                                    <div class="progress-bar bg-success" style="width: @(mPctWatched)%"></div>
+                                                    <div class="progress-bar bg-danger" style="width: @(mPctGivenUp)%"></div>
                                                 </div>
                                                 <small class="text-muted text-nowrap">@ep.TotalWatchedEpisodes/@ep.TotalAiredEpisodes</small>
                                             }

@@ -1271,6 +1271,183 @@ namespace Showlist2026.Services
             return true;
         }
 
+        public async Task<bool> ScanDirectoryFull(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory))
+                throw new ArgumentException("Directory path is required.");
+
+            if (!Directory.Exists(directory))
+                throw new DirectoryNotFoundException($"Directory not found: {directory}");
+
+            List<string> foundShowFolder = new List<string>(600000);
+            List<TouchFile> foundShowFiles = new(600000);
+            var UserShows = _db.Shows.Where(s => s.Wanted == true).ToList();
+
+            var filesToScan = await Dirlist(directory.Trim(), -1, "*.*", 0);
+
+            int filenum = 0;
+            foreach (var f in filesToScan)
+            {
+                filenum++;
+                var fileinfo = f;
+#if DEBUG
+                Console.WriteLine($"{filenum} of {filesToScan.Count} {fileinfo.Name}");
+#endif
+
+                var dirsplit = fileinfo.DirectoryName.ToLower().Split(Path.DirectorySeparatorChar);
+                var showFolderName = dirsplit.Last();
+                if (dirsplit.Length >= 2 && dirsplit.Last().ToLower().StartsWith("season "))
+                {
+                    showFolderName = dirsplit[dirsplit.Length - 2].ToLower();
+                }
+
+                if (!foundShowFolder.Contains(showFolderName))
+                {
+                    foundShowFolder.Add(showFolderName);
+                }
+
+                bool updateTouchrecord = false;
+                var tf = _db.TouchFiles
+                    .FirstOrDefault(a => a.Name == fileinfo.Name);
+                if (tf is null)
+                {
+                    tf = foundShowFiles.FirstOrDefault(a => a.Name == fileinfo.Name);
+                    if (tf is null)
+                    {
+                        tf = new TouchFile();
+                        tf.Name = fileinfo.Name;
+                        tf.FileDate = fileinfo.CreationTimeUtc;
+                        tf.WasRealFile = (fileinfo.Length > 200);
+                        updateTouchrecord = true;
+                        foundShowFiles.Add(tf);
+                    }
+                }
+
+                var tfprev = tf.WasRealFile;
+                tf.WasRealFile = (tf.WasRealFile || fileinfo.Length > 200);
+
+                if (tfprev != tf.WasRealFile)
+                {
+                    updateTouchrecord = true;
+                }
+
+                Episode episode = null;
+                Show show = null;
+                bool alreadyWatched = false;
+                if (fileinfo != null && fileinfo.DirectoryName != null && fileinfo.DirectoryName.Length > 5)
+                {
+                    if (dirsplit.Length >= 2 && dirsplit.Last().ToLower().StartsWith("season "))
+                    {
+                        String showdir = dirsplit[dirsplit.Length - 2].ToLower();
+                        String seasondir = dirsplit.Last().ToLower();
+                        show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.FolderName) && u.FolderName.ToLower().Trim() == showdir.ToLower().Trim());
+                        if (show == null)
+                        {
+                            show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.name) && u.name.ToLower() == showdir.ToLower());
+                        }
+
+                        if (show != null)
+                        {
+                            string season = "";
+                            string sepisode = "";
+                            try
+                            {
+                                Regex regex = new Regex(@"[Ss](?<season>\d{1,4})[Ee](?<episode>\d{1,4})");
+                                Match match = regex.Match(fileinfo.Name);
+                                if (match.Success)
+                                {
+                                    season = match.Groups["season"].Value;
+                                    sepisode = match.Groups["episode"].Value;
+                                }
+                                else
+                                {
+                                    Regex regexx = new Regex(@"(?<season>\d{1,4})[xX](?<episode>\d{1,4})");
+                                    Match matchx = regexx.Match(fileinfo.Name);
+                                    if (matchx.Success)
+                                    {
+                                        season = matchx.Groups["season"].Value;
+                                        sepisode = matchx.Groups["episode"].Value;
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to parse episode info from filename {FileName}", fileinfo.Name);
+                            }
+
+                            if (!string.IsNullOrEmpty(sepisode))
+                            {
+                                episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == long.Parse(sepisode)
+                                && e.season == long.Parse(season));
+                            }
+
+                            if (episode != null)
+                            {
+                                if (tf.Episode is null)
+                                {
+                                    updateTouchrecord = true;
+                                }
+                                tf.Episode = episode;
+
+                                alreadyWatched = episode.Watched;
+                            }
+
+                            if (episode != null && !alreadyWatched)
+                            {
+                                string Titletxt = $"{@show.FolderName ?? show.name}";
+                                string Messagetxt = $"{@episode.EpNumberFormatted} {@episode.name}";
+                                try
+                                {
+                                    await _notifications.SendAsync(Titletxt, Messagetxt);
+                                }
+                                catch (Exception e)
+                                {
+                                    _logger.LogWarning(e, "Failed to send download notification for {ShowName}", show.name);
+                                }
+                                try
+                                {
+                                    episode.Watched = true;
+                                    if (episode.GivenUp) episode.GivenUp = false;
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogWarning(ex, "Failed to add watched selection for episode {EpisodeId}", episode.Id);
+                                }
+                            }
+                        }
+                    }
+                }
+                if (updateTouchrecord)
+                {
+                    if (tf.Id == 0)
+                    {
+                        _db.Add(tf);
+                    }
+                    else
+                    {
+                        _db.Update(tf);
+                    }
+                }
+            }
+
+            foreach (var f in foundShowFolder)
+            {
+                var tfolder = _db.TouchFolder
+                    .FirstOrDefault(a => a.Name == f);
+                if (tfolder is null)
+                {
+                    tfolder = new TouchFolder();
+                    tfolder.Name = f;
+                    tfolder.FileDate = DateTime.UtcNow;
+                    _db.Add(tfolder);
+                }
+            }
+
+            await _db.SaveChangesAsync();
+
+            return true;
+        }
+
         public async Task<bool> RecheckTouchFiles()
         {
             List<string> foundShowFolder = new List<string>(600000);

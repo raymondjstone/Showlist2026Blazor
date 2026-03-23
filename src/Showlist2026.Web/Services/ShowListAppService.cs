@@ -722,7 +722,13 @@ namespace Showlist2026.Services
                 .ToDictionary(x => x.ShowId, x => x.Count);
 
             var watchedCountsByShow = _db.Episodes
-                .Where(e => e.Watched && wantedShowIdsList.Contains(e.show.Id))
+                .Where(e => (e.Watched || e.GivenUp) && wantedShowIdsList.Contains(e.show.Id))
+                .GroupBy(e => e.show.Id)
+                .Select(g => new { ShowId = g.Key, Count = g.Count() })
+                .ToDictionary(x => x.ShowId, x => x.Count);
+
+            var givenUpCountsByShow = _db.Episodes
+                .Where(e => e.GivenUp && wantedShowIdsList.Contains(e.show.Id))
                 .GroupBy(e => e.show.Id)
                 .Select(g => new { ShowId = g.Key, Count = g.Count() })
                 .ToDictionary(x => x.ShowId, x => x.Count);
@@ -744,6 +750,8 @@ namespace Showlist2026.Services
                 watchedCountsByShow.TryGetValue(item.NextEp.show.Id, out var watched);
                 ef.TotalAiredEpisodes = aired;
                 ef.TotalWatchedEpisodes = watched;
+                givenUpCountsByShow.TryGetValue(item.NextEp.show.Id, out var givenUp);
+                ef.TotalGivenUpEpisodes = givenUp;
                 priorityMap.TryGetValue(item.NextEp.show.Id, out var prio);
                 ef.ShowPriority = prio;
                 result.Add(ef);
