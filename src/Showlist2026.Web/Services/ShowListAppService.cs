@@ -2121,8 +2121,6 @@ namespace Showlist2026.Services
         private (Dictionary<string, Show> folderLookup, List<ParsedPathLine> parsed, int linesSkipped, HashSet<string> unmatchedFolders) ParseImportPaths(string fileContent)
         {
             var lines = fileContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            var seRegex = new Regex(@"[Ss](?<season>\d{1,4})[Ee](?<episode>\d{1,4})");
-            var seRegex2 = new Regex(@"(?<season>\d{1,4})[xX](?<episode>\d{1,4})");
 
             var allShows = _db.Shows.ToList();
             var folderLookup = new Dictionary<string, Show>(StringComparer.OrdinalIgnoreCase);
@@ -2163,16 +2161,9 @@ namespace Showlist2026.Services
                     && ext != ".mpg" && ext != ".mpeg" && ext != ".webm")
                 { linesSkipped++; continue; }
 
-                var match = seRegex.Match(fileName);
-                if (!match.Success) match = seRegex2.Match(fileName);
-
-                long? seasonNum = null;
-                long? episodeNum = null;
-                if (match.Success)
-                {
-                    seasonNum = long.Parse(match.Groups["season"].Value);
-                    episodeNum = long.Parse(match.Groups["episode"].Value);
-                }
+                var epParsed = EpisodeNameParser.Parse(fileName);
+                long? seasonNum = epParsed?.season;
+                long? episodeNum = epParsed?.episode;
 
                 string showFolder = null;
                 for (int i = parts.Length - 2; i >= 0; i--)

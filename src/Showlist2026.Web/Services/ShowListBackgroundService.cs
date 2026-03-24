@@ -1167,37 +1167,11 @@ namespace Showlist2026.Services
                         // If no show then no point in parsing any more
                         if (show != null)
                         {
-                            string season = "";
-                            string sepisode = "";
-                            try
+                            var parsed = EpisodeNameParser.Parse(fileinfo.Name);
+                            if (parsed != null)
                             {
-                                Regex regex = new Regex(@"[Ss](?<season>\d{1,4})[Ee](?<episode>\d{1,4})");
-                                Match match = regex.Match(fileinfo.Name);
-                                if (match.Success)
-                                {
-                                    season = match.Groups["season"].Value;
-                                    sepisode = match.Groups["episode"].Value;
-                                }
-                                else
-                                {
-                                    Regex regexx = new Regex(@"(?<season>\d{1,4})[xX](?<episode>\d{1,4})");
-                                    Match matchx = regexx.Match(fileinfo.Name);
-                                    if (matchx.Success)
-                                    {
-                                        season = matchx.Groups["season"].Value;
-                                        sepisode = matchx.Groups["episode"].Value;
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Failed to parse episode info from filename {FileName}", fileinfo.Name);
-                            }
-
-                            if (!string.IsNullOrEmpty(sepisode))
-                            {
-                                episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == long.Parse(sepisode)
-                                && e.season == long.Parse(season));
+                                episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == parsed.Value.episode
+                                && e.season == parsed.Value.season);
                             }
 
                             if (episode != null)
@@ -1348,37 +1322,11 @@ namespace Showlist2026.Services
 
                         if (show != null)
                         {
-                            string season = "";
-                            string sepisode = "";
-                            try
+                            var parsed = EpisodeNameParser.Parse(fileinfo.Name);
+                            if (parsed != null)
                             {
-                                Regex regex = new Regex(@"[Ss](?<season>\d{1,4})[Ee](?<episode>\d{1,4})");
-                                Match match = regex.Match(fileinfo.Name);
-                                if (match.Success)
-                                {
-                                    season = match.Groups["season"].Value;
-                                    sepisode = match.Groups["episode"].Value;
-                                }
-                                else
-                                {
-                                    Regex regexx = new Regex(@"(?<season>\d{1,4})[xX](?<episode>\d{1,4})");
-                                    Match matchx = regexx.Match(fileinfo.Name);
-                                    if (matchx.Success)
-                                    {
-                                        season = matchx.Groups["season"].Value;
-                                        sepisode = matchx.Groups["episode"].Value;
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Failed to parse episode info from filename {FileName}", fileinfo.Name);
-                            }
-
-                            if (!string.IsNullOrEmpty(sepisode))
-                            {
-                                episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == long.Parse(sepisode)
-                                && e.season == long.Parse(season));
+                                episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == parsed.Value.episode
+                                && e.season == parsed.Value.season);
                             }
 
                             if (episode != null)
