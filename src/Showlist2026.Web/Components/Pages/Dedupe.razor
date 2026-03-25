@@ -1,0 +1,171 @@
+@page "/dedupe"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Dedupe Episodes</PageTitle>
+
+<div class="container-fluid">
+    <h4>Duplicate Episode Files</h4>
+    <p class="text-muted">Scans all configured TV directories for files above 0 bytes, finding cases where multiple files exist for the same show/season/episode (excluding episode 0).</p>
+
+    <button class="btn btn-primary mb-3" @onclick="RunScan" disabled="@isRunning">
+        <i class="fas fa-search"></i> Scan for Duplicates
+    </button>
+
+    @if (isRunning)
+    {
+        <div class="text-center mt-3">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Scanning...</span>
+            </div>
+            <p>Scanning directories...</p>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div class="alert @(isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+            @statusMessage
+            <button type="button" class="btn-close" @onclick="() => statusMessage = null"></button>
+        </div>
+    }
+
+    @if (duplicates != null && !isRunning)
+    {
+        @if (duplicates.Count == 0)
+        {
+            <div class="alert alert-success">No duplicate episode files found.</div>
+        }
+        else
+        {
+            <p class="mb-2"><strong>@duplicates.Count</strong> files across <strong>@groupCount</strong> duplicate groups</p>
+
+            var groups = duplicates.GroupBy(d => d.GroupKey);
+            foreach (var group in groups)
+            {
+                var first = group.First();
+                var items = group.ToList();
+                var canDelete = items.Count > 1;
+
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>@first.ShowName</strong> &mdash; S@(first.Season.ToString("D2"))E@(first.Episode.ToString("D2"))
+                        <span class="badge bg-warning text-dark ms-2">@items.Count files</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>File Name</th>
+                                    <th>Directory</th>
+                                    <th class="text-end">Size</th>
+                                    <th class="text-center" style="width:100px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var file in items)
+                                {
+                                    <tr>
+                                        <td class="small text-break">@file.FileName</td>
+                                        <td class="small text-break text-muted">@file.Directory</td>
+                                        <td class="text-end small text-nowrap">@FormatSize(file.FileSize)</td>
+                                        <td class="text-center">
+                                            @if (canDelete)
+                                            {
+                                                <button class="btn btn-outline-danger btn-sm"
+                                                        @onclick="() => DeleteFile(file)"
+                                                        disabled="@isRunning">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success">Kept</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    private List<DuplicateFileEntry>? duplicates;
+    private int groupCount;
+    private bool isRunning;
+    private string? statusMessage;
+    private bool isError;
+
+    private async Task RunScan()
+    {
+        isRunning = true;
+        statusMessage = null;
+        isError = false;
+        duplicates = null;
+        StateHasChanged();
+
+        try
+        {
+            duplicates = await Task.Run(() => AppService.FindDuplicateEpisodeFiles());
+            groupCount = duplicates.GroupBy(d => d.GroupKey).Count();
+            statusMessage = $"Scan complete. Found {groupCount} duplicate groups.";
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Scan failed: {ex.Message}";
+            isError = true;
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private void DeleteFile(DuplicateFileEntry file)
+    {
+        try
+        {
+            var fullPath = Path.Combine(file.Directory, file.FileName);
+            var result = AppService.DeleteFile(fullPath);
+            if (result)
+            {
+                duplicates!.Remove(file);
+
+                // If group now has only one file, it's no longer a duplicate
+                var remaining = duplicates.Where(d => d.GroupKey == file.GroupKey).ToList();
+                if (remaining.Count <= 1)
+                {
+                    foreach (var r in remaining)
+                        duplicates.Remove(r);
+                }
+
+                groupCount = duplicates.GroupBy(d => d.GroupKey).Count();
+                statusMessage = $"Deleted {file.FileName}";
+                isError = false;
+            }
+            else
+            {
+                statusMessage = $"Could not delete {file.FileName} - file not found.";
+                isError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Delete failed: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes >= 1_073_741_824) return $"{bytes / 1_073_741_824.0:F2} GB";
+        if (bytes >= 1_048_576) return $"{bytes / 1_048_576.0:F1} MB";
+        if (bytes >= 1_024) return $"{bytes / 1_024.0:F0} KB";
+        return $"{bytes} B";
+    }
+}

@@ -18,7 +18,20 @@ public static class EpisodeNameParser
     {
         var match = SeRegex.Match(fileName);
         if (!match.Success) match = XRegex.Match(fileName);
-        if (!match.Success) match = BareRegex.Match(fileName);
+        if (!match.Success)
+        {
+            // For bare format, skip matches that are years (1900-2099)
+            match = BareRegex.Match(fileName);
+            while (match.Success)
+            {
+                if (int.TryParse(match.Value, out var num) && num >= 1900 && num <= 2099)
+                {
+                    match = match.NextMatch();
+                    continue;
+                }
+                break;
+            }
+        }
 
         if (!match.Success) return null;
 

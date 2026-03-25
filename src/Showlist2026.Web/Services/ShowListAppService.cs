@@ -2290,6 +2290,96 @@ namespace Showlist2026.Services
             await _db.SaveChangesAsync();
             return (matchedShowIds.Count, episodesMarked);
         }
+
+        public List<DuplicateFileEntry> FindDuplicateEpisodeFiles()
+        {
+            var dirs = _db.TVDirectories
+                .Where(d => d.DaysToScan != 0)
+                .ToList();
+
+            var allShows = _db.Shows.Where(s => s.Wanted == true).ToList();
+
+            var allFiles = new List<DuplicateFileEntry>();
+
+            foreach (var tvdir in dirs)
+            {
+                if (string.IsNullOrWhiteSpace(tvdir.Name) || !Directory.Exists(tvdir.Name.Trim()))
+                    continue;
+
+                List<FileInfo> files;
+                try
+                {
+                    files = Directory.GetFiles(tvdir.Name.Trim(), tvdir.Filter ?? "*.*", SearchOption.AllDirectories)
+                        .Select(f => new FileInfo(f))
+                        .Where(fi => fi.Length > 0)
+                        .ToList();
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+
+                foreach (var fi in files)
+                {
+                    if (fi.DirectoryName == null || fi.DirectoryName.Length <= 5) continue;
+
+                    var parsed = EpisodeNameParser.Parse(fi.Name);
+                    if (parsed == null || parsed.Value.episode == 0 || parsed.Value.season == 0) continue;
+
+                    var dirsplit = fi.DirectoryName.ToLower().Split(Path.DirectorySeparatorChar);
+                    var showFolderName = dirsplit.Last();
+                    if (dirsplit.Length >= 2 && showFolderName.StartsWith("season "))
+                    {
+                        showFolderName = dirsplit[dirsplit.Length - 2];
+                    }
+
+                    var show = allShows.FirstOrDefault(u =>
+                        !string.IsNullOrEmpty(u.FolderName) &&
+                        u.FolderName.Trim().Equals(showFolderName, StringComparison.OrdinalIgnoreCase));
+                    if (show == null)
+                    {
+                        show = allShows.FirstOrDefault(u =>
+                            !string.IsNullOrEmpty(u.name) &&
+                            u.name.Equals(showFolderName, StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    var showName = show?.name ?? showFolderName;
+
+                    allFiles.Add(new DuplicateFileEntry
+                    {
+                        ShowName = showName,
+                        ShowFolderName = showFolderName,
+                        Season = parsed.Value.season,
+                        Episode = parsed.Value.episode,
+                        Directory = fi.DirectoryName,
+                        FileName = fi.Name,
+                        FileSize = fi.Length
+                    });
+                }
+            }
+
+            // Group by show/season/episode and keep only groups with more than one file
+            var duplicates = allFiles
+                .GroupBy(f => f.GroupKey, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .SelectMany(g => g)
+                .OrderBy(f => f.ShowName)
+                .ThenBy(f => f.Season)
+                .ThenBy(f => f.Episode)
+                .ThenByDescending(f => f.FileSize)
+                .ToList();
+
+            return duplicates;
+        }
+
+        public bool DeleteFile(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                return false;
+
+            File.Delete(filePath);
+            return true;
+        }
     }
 }
 

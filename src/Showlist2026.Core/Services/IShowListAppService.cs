@@ -103,5 +103,9 @@ namespace Showlist2026.Services
         // Import watched shows from file path list
         ImportPathsPreview PreviewImportWatchedFromPaths(string fileContent);
         Task<(int showsMatched, int episodesMarked)> CommitImportWatchedFromPaths(string fileContent);
+
+        // Dedupe: find duplicate episode files across TV directories
+        List<DuplicateFileEntry> FindDuplicateEpisodeFiles();
+        bool DeleteFile(string filePath);
     }
 }
