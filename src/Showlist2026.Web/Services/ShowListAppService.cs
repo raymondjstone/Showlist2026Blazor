@@ -2035,9 +2035,12 @@ namespace Showlist2026.Services
         public StorageDashboardModel GetStorageDashboard()
         {
             var model = new StorageDashboardModel();
-            var basePath = _options.ShowFolderBasePath;
 
-            if (!Directory.Exists(basePath))
+            var tvDirs = _db.TVDirectories
+                .Where(d => d.DaysToScan != 0)
+                .ToList();
+
+            if (!tvDirs.Any())
                 return model;
 
             // Build folder -> show lookup
@@ -2057,30 +2060,59 @@ namespace Showlist2026.Services
                     folderToShow[folder] = show;
             }
 
-            var dirs = Directory.GetDirectories(basePath);
-            model.TotalFolders = dirs.Length;
+            // Aggregate show folders across all TV directories, merging if the same folder appears in multiple
+            var showFolderData = new Dictionary<string, (long size, int fileCount, int seasonCount, string firstDir)>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var dir in dirs)
+            foreach (var tvdir in tvDirs)
             {
-                var folderName = Path.GetFileName(dir);
-                long size = 0;
-                int fileCount = 0;
-                int seasonCount = 0;
+                if (string.IsNullOrWhiteSpace(tvdir.Name) || !Directory.Exists(tvdir.Name.Trim()))
+                    continue;
 
+                var basePath = tvdir.Name.Trim();
+                string[] dirs;
                 try
                 {
-                    var files = Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories);
-                    foreach (var f in files)
-                    {
-                        var fi = new FileInfo(f);
-                        size += fi.Length;
-                        fileCount++;
-                    }
-                    seasonCount = Directory.GetDirectories(dir).Length;
+                    dirs = Directory.GetDirectories(basePath);
                 }
                 catch { continue; }
 
-                model.TotalSizeBytes += size;
+                foreach (var dir in dirs)
+                {
+                    var folderName = Path.GetFileName(dir);
+                    long size = 0;
+                    int fileCount = 0;
+                    int seasonCount = 0;
+
+                    try
+                    {
+                        var files = Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories);
+                        foreach (var f in files)
+                        {
+                            var fi = new FileInfo(f);
+                            size += fi.Length;
+                            fileCount++;
+                        }
+                        seasonCount = Directory.GetDirectories(dir).Length;
+                    }
+                    catch { continue; }
+
+                    if (showFolderData.TryGetValue(folderName, out var existing))
+                    {
+                        showFolderData[folderName] = (existing.size + size, existing.fileCount + fileCount,
+                            Math.Max(existing.seasonCount, seasonCount), existing.firstDir);
+                    }
+                    else
+                    {
+                        showFolderData[folderName] = (size, fileCount, seasonCount, basePath);
+                    }
+                }
+            }
+
+            model.TotalFolders = showFolderData.Count;
+
+            foreach (var (folderName, data) in showFolderData)
+            {
+                model.TotalSizeBytes += data.size;
 
                 if (folderToShow.TryGetValue(folderName, out var show))
                 {
@@ -2090,9 +2122,9 @@ namespace Showlist2026.Services
                         ShowId = show.Id,
                         ShowName = show.name ?? folderName,
                         FolderName = folderName,
-                        SizeBytes = size,
-                        FileCount = fileCount,
-                        SeasonCount = seasonCount,
+                        SizeBytes = data.size,
+                        FileCount = data.fileCount,
+                        SeasonCount = data.seasonCount,
                         Status = show.status ?? "",
                         IsWanted = wantedShowIds.Contains(show.Id)
                     });
@@ -2104,9 +2136,9 @@ namespace Showlist2026.Services
                     model.Shows.Add(new ShowStorageInfo
                     {
                         FolderName = folderName,
-                        SizeBytes = size,
-                        FileCount = fileCount,
-                        SeasonCount = seasonCount
+                        SizeBytes = data.size,
+                        FileCount = data.fileCount,
+                        SeasonCount = data.seasonCount
                     });
                 }
             }
