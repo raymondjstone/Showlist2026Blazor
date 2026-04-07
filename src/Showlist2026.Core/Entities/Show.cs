@@ -36,6 +36,7 @@ namespace Showlist2026.Entities
 
 
         public ICollection<Genre>? Genres { get; set; }
+        public ICollection<ShowFolderAlias>? FolderAliases { get; set; }
 
         /// <summary>
         /// null = undecided, true = wanted, false = explicitly excluded

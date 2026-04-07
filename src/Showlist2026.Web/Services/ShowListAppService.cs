@@ -42,7 +42,8 @@ namespace Showlist2026.Services
             return _db.TVSites.OrderBy(a => a.Order).ToList();
         }
 
-        public async Task TVSiteUpdate(int id, bool active, int order, string name, string urltemplate)
+        public async Task TVSiteUpdate(int id, bool active, int order, string name, string urltemplate, 
+            string apiKey = "", string apiBaseUrl = "", string rssApiKey = "", string rssBaseUrl = "")
         {
             TVSite current = null;
             if (id > 0)
@@ -57,7 +58,11 @@ namespace Showlist2026.Services
                     Order = order,
                     Name = name,
                     URLTemplate = @urltemplate,
-                    Active = active
+                    Active = active,
+                    ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
+                    ApiBaseUrl = string.IsNullOrWhiteSpace(apiBaseUrl) ? null : apiBaseUrl,
+                    RssApiKey = string.IsNullOrWhiteSpace(rssApiKey) ? null : rssApiKey,
+                    RssBaseUrl = string.IsNullOrWhiteSpace(rssBaseUrl) ? null : rssBaseUrl
                 };
                 _db.Add(newOne);
             }
@@ -67,6 +72,10 @@ namespace Showlist2026.Services
                 current.Name = name;
                 current.URLTemplate = @urltemplate;
                 current.Active = active;
+                current.ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
+                current.ApiBaseUrl = string.IsNullOrWhiteSpace(apiBaseUrl) ? null : apiBaseUrl;
+                current.RssApiKey = string.IsNullOrWhiteSpace(rssApiKey) ? null : rssApiKey;
+                current.RssBaseUrl = string.IsNullOrWhiteSpace(rssBaseUrl) ? null : rssBaseUrl;
                 _db.Update(current);
             }
 
@@ -90,7 +99,7 @@ namespace Showlist2026.Services
             return _db.TVDirectories.OrderBy(a => a.Name).ToList();
         }
 
-        public async Task TVDirectoryUpdate(int id, string name, int daysToScan, string filter, int minFileSize)
+        public async Task TVDirectoryUpdate(int id, string name, int daysToScan, string filter, int minFileSize, bool aliasable = false)
         {
             TVDirectories current = null;
             if (id > 0)
@@ -105,7 +114,8 @@ namespace Showlist2026.Services
                     Name = name,
                     DaysToScan = daysToScan,
                     Filter = filter,
-                    MinFileSize = minFileSize
+                    MinFileSize = minFileSize,
+                    Aliasable = aliasable
                 };
                 _db.Add(newOne);
             }
@@ -115,6 +125,7 @@ namespace Showlist2026.Services
                 current.DaysToScan = daysToScan;
                 current.Filter = filter;
                 current.MinFileSize = minFileSize;
+                current.Aliasable = aliasable;
                 _db.Update(current);
             }
 
@@ -973,28 +984,6 @@ namespace Showlist2026.Services
                 show.Wanted = statewanted;
                 await _db.SaveChangesAsync();
 
-                // Create folder when newly marking as wanted
-                if (statewanted == true && wasUndecided)
-                {
-                    try
-                    {
-                        string f = show.FolderName;
-                        if (string.IsNullOrEmpty(f))
-                        {
-                            f = show.DefaultFolderName;
-                        }
-                        //   F:\tv_name_list
-                        string path = Path.Combine(_options.ShowFolderBasePath, show.DefaultFolderName);
-                        if (!(Directory.Exists(path)))
-                        {
-                            Directory.CreateDirectory(path);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to create folder for show {ShowId}", id);
-                    }
-                }
 
                 return true;
             }
@@ -2341,9 +2330,15 @@ namespace Showlist2026.Services
                 List<FileInfo> files;
                 try
                 {
+                    // Only include video file extensions for dedupe check
+                    var videoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ".mkv", ".mp4", ".avi", ".wmv", ".mov", ".m4v", ".flv", ".webm", ".mpeg", ".mpg", ".ts", ".m2ts"
+                    };
+
                     files = Directory.GetFiles(tvdir.Name.Trim(), tvdir.Filter ?? "*.*", SearchOption.AllDirectories)
                         .Select(f => new FileInfo(f))
-                        .Where(fi => fi.Length > 0)
+                        .Where(fi => fi.Length > 0 && videoExtensions.Contains(fi.Extension))
                         .ToList();
                 }
                 catch (Exception)
@@ -2385,7 +2380,8 @@ namespace Showlist2026.Services
                         Episode = parsed.Value.episode,
                         Directory = fi.DirectoryName,
                         FileName = fi.Name,
-                        FileSize = fi.Length
+                        FileSize = fi.Length,
+                        FileDate = fi.LastWriteTime
                     });
                 }
             }
@@ -2411,6 +2407,943 @@ namespace Showlist2026.Services
 
             File.Delete(filePath);
             return true;
+        }
+
+        public async Task<NzbSiteCrawlSummary> CrawlNzbSitesForShow(long showId)
+        {
+            var summary = new NzbSiteCrawlSummary();
+
+            var show = _db.Shows
+                .Include(s => s.Episodes)
+                .FirstOrDefault(s => s.Id == showId);
+
+            if (show == null)
+            {
+                summary.Errors.Add("Show not found");
+                return summary;
+            }
+
+            // Get unwatched episodes - include those airing in the next 2 days
+            var twoDaysFromNow = DateTimeOffset.UtcNow.AddDays(2);
+            var unwatchedEpisodes = (show.Episodes ?? new List<Episode>())
+                .Where(e => !e.Watched && !e.GivenUp && e.AirDateOffset2 < twoDaysFromNow)
+                .OrderByDescending(e => e.season)
+                .ThenByDescending(e => e.number)
+                .ToList();
+
+            if (!unwatchedEpisodes.Any())
+            {
+                summary.Errors.Add("No unwatched episodes to search for");
+                return summary;
+            }
+
+            // Get active TV sites
+            var sites = _db.TVSites.Where(s => s.Active).OrderBy(s => s.Order).ToList();
+            if (!sites.Any())
+            {
+                summary.Errors.Add("No active search sites configured");
+                return summary;
+            }
+
+            var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            httpClient.Timeout = TimeSpan.FromSeconds(30);
+
+            foreach (var site in sites)
+            {
+                if (string.IsNullOrEmpty(site.URLTemplate)) continue;
+
+                var crawledInfo = new CrawledSiteInfo
+                {
+                    SiteName = site.Name ?? "Unknown",
+                    Url = ""
+                };
+
+                try
+                {
+                    // Check if site has API key configured - use Newznab API if available
+                    if (!string.IsNullOrEmpty(site.ApiKey))
+                    {
+                        var apiResults = await CrawlWithNewznabApi(httpClient, site, show, unwatchedEpisodes, crawledInfo, summary);
+                        summary.Results.AddRange(apiResults);
+                        summary.CrawledUrls.Add(crawledInfo);
+                        if (crawledInfo.Success) summary.SitesCrawled++;
+                        continue;
+                    }
+
+                    // Fallback to HTML scraping (requires user to be logged in - won't work server-side)
+                    var searchUrl = site.URLTemplate
+                        .Replace("{URLSearchTerm}", Uri.EscapeDataString(show.URLSearchTerm))
+                        .Replace("{URLSearchTermNameOnly}", Uri.EscapeDataString(show.URLSearchTermNameOnly))
+                        .Replace("{URLSearchTermGeekSeek}", Uri.EscapeDataString(show.URLSearchTermGeekSeek));
+
+                    crawledInfo.Url = searchUrl;
+
+                    var response = await httpClient.GetAsync(searchUrl);
+                    crawledInfo.HttpStatus = (int)response.StatusCode;
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        crawledInfo.Success = false;
+                        crawledInfo.ErrorMessage = $"HTTP {(int)response.StatusCode}";
+                        summary.Errors.Add($"{site.Name}: HTTP {(int)response.StatusCode}");
+                        summary.CrawledUrls.Add(crawledInfo);
+                        continue;
+                    }
+
+                    var html = await response.Content.ReadAsStringAsync();
+                    crawledInfo.Success = true;
+                    summary.SitesCrawled++;
+
+                    // Parse HTML for NZB links - this is a basic implementation
+                    // that looks for common patterns in NZB site HTML
+                    var (results, debugInfo) = ParseNzbSiteHtml(html, site.Name ?? "Unknown", searchUrl, unwatchedEpisodes);
+                    summary.Results.AddRange(results);
+                    summary.DebugInfo.AddRange(debugInfo);
+                }
+                catch (TaskCanceledException)
+                {
+                    crawledInfo.Success = false;
+                    crawledInfo.ErrorMessage = "Timeout";
+                    summary.Errors.Add($"{site.Name}: Timeout");
+                }
+                catch (Exception ex)
+                {
+                    crawledInfo.Success = false;
+                    crawledInfo.ErrorMessage = ex.Message;
+                    summary.Errors.Add($"{site.Name}: {ex.Message}");
+                }
+
+                summary.CrawledUrls.Add(crawledInfo);
+            }
+
+            // Filter results to only unwatched episodes and deduplicate
+            var unwatchedCodes = unwatchedEpisodes.Select(e => e.EpNumberFormatted).ToHashSet();
+            summary.Results = summary.Results
+                .Where(r => unwatchedCodes.Any(code => r.EpisodeCode.Contains(code, StringComparison.OrdinalIgnoreCase)
+                    || r.Title.Contains(code, StringComparison.OrdinalIgnoreCase)))
+                .GroupBy(r => new { r.SiteName, r.Title })
+                .Select(g => g.First())
+                .OrderByDescending(r => r.EpisodeCode)
+                .ThenBy(r => r.SiteName)
+                .ToList();
+
+            summary.TotalResults = summary.Results.Count;
+            return summary;
+        }
+
+        /// <summary>
+        /// Crawl an NZB site using the Newznab API (requires API key).
+        /// This is the preferred method as it doesn't require browser authentication.
+        /// </summary>
+        private async Task<List<NzbSiteCrawlResult>> CrawlWithNewznabApi(
+            HttpClient httpClient,
+            TVSite site,
+            Show show,
+            List<Episode> unwatchedEpisodes,
+            CrawledSiteInfo crawledInfo,
+            NzbSiteCrawlSummary summary)
+        {
+            var results = new List<NzbSiteCrawlResult>();
+
+            // Determine API base URL
+            var apiBase = site.ApiBaseUrl;
+            if (string.IsNullOrEmpty(apiBase))
+            {
+                // Try to derive from URLTemplate
+                if (!string.IsNullOrEmpty(site.URLTemplate))
+                {
+                    var uri = new Uri(site.URLTemplate.Split('?')[0].Split('{')[0]);
+                    apiBase = $"{uri.Scheme}://{uri.Host}";
+                    // Common API endpoints
+                    if (uri.Host.Contains("nzbgeek", StringComparison.OrdinalIgnoreCase))
+                        apiBase = "https://api.nzbgeek.info";
+                }
+            }
+
+            if (string.IsNullOrEmpty(apiBase))
+            {
+                summary.DebugInfo.Add($"[{site.Name}] API: No API base URL configured");
+                crawledInfo.Success = false;
+                crawledInfo.ErrorMessage = "No API base URL";
+                return results;
+            }
+
+            // Build API URL for TV search
+            // Newznab API: /api?t=tvsearch&apikey=KEY&q=ShowName or &tvdbid=ID
+            var showName = Uri.EscapeDataString(show.name ?? "");
+            var apiUrl = $"{apiBase}/api?t=tvsearch&apikey={site.ApiKey}&q={showName}&cat=5000";
+
+            crawledInfo.Url = apiUrl.Replace(site.ApiKey!, "[HIDDEN]"); // Don't expose API key in UI
+            summary.DebugInfo.Add($"[{site.Name}] API: Using Newznab API");
+
+            try
+            {
+                var response = await httpClient.GetAsync(apiUrl);
+                crawledInfo.HttpStatus = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    crawledInfo.Success = false;
+                    crawledInfo.ErrorMessage = $"HTTP {(int)response.StatusCode}";
+                    summary.DebugInfo.Add($"[{site.Name}] API: HTTP {(int)response.StatusCode}");
+                    return results;
+                }
+
+                var xml = await response.Content.ReadAsStringAsync();
+                crawledInfo.Success = true;
+
+                // Parse Newznab XML response
+                results = ParseNewznabResponse(xml, site.Name ?? "Unknown", apiUrl, unwatchedEpisodes, summary);
+                summary.DebugInfo.Add($"[{site.Name}] API: Found {results.Count} results");
+            }
+            catch (Exception ex)
+            {
+                crawledInfo.Success = false;
+                crawledInfo.ErrorMessage = ex.Message;
+                summary.DebugInfo.Add($"[{site.Name}] API Error: {ex.Message}");
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Parse Newznab API XML response.
+        /// </summary>
+        private List<NzbSiteCrawlResult> ParseNewznabResponse(
+            string xml,
+            string siteName,
+            string searchUrl,
+            List<Episode> unwatchedEpisodes,
+            NzbSiteCrawlSummary summary)
+        {
+            var results = new List<NzbSiteCrawlResult>();
+
+            // Build unwatched episode codes
+            var unwatchedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ep in unwatchedEpisodes)
+            {
+                unwatchedCodes.Add(ep.EpNumberFormatted);
+                unwatchedCodes.Add($"S{ep.season}E{ep.number}");
+                unwatchedCodes.Add($"{ep.season}x{ep.number:D2}");
+            }
+
+            try
+            {
+                var doc = System.Xml.Linq.XDocument.Parse(xml);
+                var ns = doc.Root?.GetDefaultNamespace() ?? System.Xml.Linq.XNamespace.None;
+
+                // Check for error response
+                var error = doc.Descendants("error").FirstOrDefault();
+                if (error != null)
+                {
+                    var errorCode = error.Attribute("code")?.Value;
+                    var errorDesc = error.Attribute("description")?.Value;
+                    summary.DebugInfo.Add($"[{siteName}] API Error: {errorCode} - {errorDesc}");
+                    return results;
+                }
+
+                // Parse items
+                var items = doc.Descendants("item");
+                summary.DebugInfo.Add($"[{siteName}] API: Parsing {items.Count()} items from XML");
+
+                foreach (var item in items)
+                {
+                    var title = item.Element("title")?.Value ?? "";
+                    var link = item.Element("link")?.Value ?? "";
+                    var pubDate = item.Element("pubDate")?.Value;
+                    var size = "";
+
+                    // Get size from newznab attributes
+                    var attrs = item.Elements().Where(e => e.Name.LocalName == "attr");
+                    foreach (var attr in attrs)
+                    {
+                        var name = attr.Attribute("name")?.Value;
+                        var value = attr.Attribute("value")?.Value;
+                        if (name == "size" && !string.IsNullOrEmpty(value) && long.TryParse(value, out var bytes))
+                        {
+                            size = bytes > 1_000_000_000 ? $"{bytes / 1_000_000_000.0:F2} GB" : $"{bytes / 1_000_000.0:F1} MB";
+                        }
+                    }
+
+                    // Extract episode code from title
+                    string? episodeCode = null;
+                    var epMatch = Regex.Match(title, @"S(\d{1,2})E(\d{1,2})", RegexOptions.IgnoreCase);
+                    if (epMatch.Success)
+                    {
+                        var season = int.Parse(epMatch.Groups[1].Value);
+                        var episode = int.Parse(epMatch.Groups[2].Value);
+                        episodeCode = $"S{season:D2}E{episode:D2}";
+                    }
+                    else
+                    {
+                        var altMatch = Regex.Match(title, @"(\d{1,2})x(\d{2})", RegexOptions.IgnoreCase);
+                        if (altMatch.Success)
+                        {
+                            var season = int.Parse(altMatch.Groups[1].Value);
+                            var episode = int.Parse(altMatch.Groups[2].Value);
+                            episodeCode = $"S{season:D2}E{episode:D2}";
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(episodeCode)) continue;
+                    if (!unwatchedCodes.Contains(episodeCode)) continue;
+
+                    results.Add(new NzbSiteCrawlResult
+                    {
+                        SiteName = siteName,
+                        Title = title.Length > 150 ? title.Substring(0, 150) + "..." : title,
+                        EpisodeCode = episodeCode,
+                        DownloadUrl = link,
+                        Size = size,
+                        PostDate = DateTime.TryParse(pubDate, out var dt) ? dt : null,
+                        SearchUrl = searchUrl.Replace(Regex.Match(searchUrl, @"apikey=[^&]+").Value, "apikey=[HIDDEN]")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                summary.DebugInfo.Add($"[{siteName}] API XML Parse Error: {ex.Message}");
+            }
+
+            return results;
+        }
+
+        private (List<NzbSiteCrawlResult> results, List<string> debugInfo) ParseNzbSiteHtml(string html, string siteName, string searchUrl, List<Episode> unwatchedEpisodes)
+        {
+            var results = new List<NzbSiteCrawlResult>();
+            var debugInfo = new List<string>();
+
+            debugInfo.Add($"[{siteName}] HTML length: {html.Length} chars");
+            debugInfo.Add($"[{siteName}] WARNING: No API key configured - HTML scraping requires login (use API key instead)");
+
+            // Build episode code patterns - match S01E01, S1E1, 1x01, etc.
+            var episodePatterns = new[]
+            {
+                @"S(\d{1,2})E(\d{1,2})",      // S01E01, S1E1
+                @"(\d{1,2})x(\d{2})",          // 1x01, 01x01
+                @"Season\s*(\d{1,2})\s*Episode\s*(\d{1,2})", // Season 1 Episode 1
+            };
+
+            // Build a set of unwatched episode codes in multiple formats for matching
+            var unwatchedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ep in unwatchedEpisodes)
+            {
+                unwatchedCodes.Add(ep.EpNumberFormatted); // S01E01
+                unwatchedCodes.Add($"S{ep.season}E{ep.number}"); // S1E1 without padding
+                unwatchedCodes.Add($"{ep.season}x{ep.number:D2}"); // 1x01
+                unwatchedCodes.Add($"{ep.season:D2}x{ep.number:D2}"); // 01x01
+            }
+
+            debugInfo.Add($"[{siteName}] Looking for episodes: {string.Join(", ", unwatchedCodes.Take(10))}{(unwatchedCodes.Count > 10 ? "..." : "")}");
+
+            // Find ALL realistic episode codes present in the HTML (for debugging)
+            // Filter out unrealistic ones (season > 30 or episode > 50) which are likely false positives from Base64 data
+            var foundEpCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pattern in episodePatterns)
+            {
+                var allMatches = Regex.Matches(html, pattern, RegexOptions.IgnoreCase);
+                foreach (Match m in allMatches)
+                {
+                    var s = int.Parse(m.Groups[1].Value);
+                    var e = int.Parse(m.Groups[2].Value);
+                    // Filter out unrealistic episode codes (likely from Base64/encoded data)
+                    if (s <= 30 && e <= 50)
+                    {
+                        foundEpCodes.Add($"S{s:D2}E{e:D2}");
+                    }
+                }
+            }
+            debugInfo.Add($"[{siteName}] Realistic episode codes in HTML: {(foundEpCodes.Any() ? string.Join(", ", foundEpCodes.Take(15)) : "NONE")}");
+
+            // Check for common patterns in HTML
+            var hasTable = html.Contains("<table", StringComparison.OrdinalIgnoreCase);
+            var hasTr = html.Contains("<tr", StringComparison.OrdinalIgnoreCase);
+            var hasDiv = html.Contains("<div", StringComparison.OrdinalIgnoreCase);
+            debugInfo.Add($"[{siteName}] HTML contains: table={hasTable}, tr={hasTr}, div={hasDiv}");
+
+            // Show first few anchor tags for debugging
+            var sampleAnchors = Regex.Matches(html, @"<a\s+[^>]*href\s*=\s*[""']([^""']{0,100})[""'][^>]*>([^<]{0,100})</a>", RegexOptions.IgnoreCase);
+            var anchorSamples = sampleAnchors.Cast<Match>().Take(5).Select(m => $"[{m.Groups[2].Value.Trim()}]({m.Groups[1].Value})");
+            if (anchorSamples.Any())
+            {
+                debugInfo.Add($"[{siteName}] Sample anchors: {string.Join(" | ", anchorSamples)}");
+            }
+
+            // Show a sample of readable HTML (skip encoded/binary content)
+            var readableHtml = Regex.Replace(html, @"[A-Za-z0-9+/=]{50,}", "[BASE64]"); // Replace long base64 strings
+            var bodyMatch = Regex.Match(readableHtml, @"<body[^>]*>([\s\S]{0,5000})", RegexOptions.IgnoreCase);
+            if (bodyMatch.Success)
+            {
+                var sample = bodyMatch.Groups[1].Value;
+                sample = Regex.Replace(sample, @"<script[\s\S]*?</script>", "", RegexOptions.IgnoreCase);
+                sample = Regex.Replace(sample, @"<style[\s\S]*?</style>", "", RegexOptions.IgnoreCase);
+                sample = Regex.Replace(sample, @"<[^>]+>", " ");
+                sample = System.Net.WebUtility.HtmlDecode(sample);
+                sample = Regex.Replace(sample, @"\s+", " ").Trim();
+                if (sample.Length > 500) sample = sample.Substring(0, 500);
+                debugInfo.Add($"[{siteName}] Page text sample: {sample}...");
+            }
+
+            // Strategy 1: Find anchors containing episode codes - simplest approach
+            // Look for <a> tags where the text OR href contains an episode code
+            var anchorPattern = @"<a\s+[^>]*href\s*=\s*[""']([^""']+)[""'][^>]*>(.*?)</a>";
+            var allAnchors = Regex.Matches(html, anchorPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            debugInfo.Add($"[{siteName}] Total anchor tags found: {allAnchors.Count}");
+
+            int anchorsWithEpCode = 0;
+            foreach (Match anchor in allAnchors)
+            {
+                var href = anchor.Groups[1].Value;
+                var text = System.Net.WebUtility.HtmlDecode(anchor.Groups[2].Value);
+                text = Regex.Replace(text, @"<[^>]+>", " ").Trim();
+                var combined = text + " " + href;
+
+                string episodeCode = null;
+                foreach (var pattern in episodePatterns)
+                {
+                    var epMatch = Regex.Match(combined, pattern, RegexOptions.IgnoreCase);
+                    if (epMatch.Success)
+                    {
+                        var season = int.Parse(epMatch.Groups[1].Value);
+                        var episode = int.Parse(epMatch.Groups[2].Value);
+                        // Filter out unrealistic episode codes
+                        if (season <= 30 && episode <= 50)
+                        {
+                            episodeCode = $"S{season:D2}E{episode:D2}";
+                        }
+                        break;
+                    }
+                }
+
+                if (episodeCode == null) continue;
+                anchorsWithEpCode++;
+
+                if (!unwatchedCodes.Contains(episodeCode)) continue;
+
+                // Found a matching anchor! Now find download URL nearby
+                var contextStart = Math.Max(0, anchor.Index - 1000);
+                var contextEnd = Math.Min(html.Length, anchor.Index + anchor.Length + 2000);
+                var context = html.Substring(contextStart, contextEnd - contextStart);
+
+                // Look for download URLs in the context
+                var downloadUrl = "";
+                var dlPatterns = new[]
+                {
+                    @"href\s*=\s*[""'](https?://[^""']*(?:get|download|cdn|api)[^""']*)[""']",
+                    @"href\s*=\s*[""'](https?://[^""']*\.nzb[^""']*)[""']",
+                    @"href\s*=\s*[""'](https?://api\.[^""']+)[""']",
+                };
+                foreach (var dlPattern in dlPatterns)
+                {
+                    var dlMatch = Regex.Match(context, dlPattern, RegexOptions.IgnoreCase);
+                    if (dlMatch.Success)
+                    {
+                        downloadUrl = dlMatch.Groups[1].Value;
+                        break;
+                    }
+                }
+
+                // Extract size from context
+                var sizeMatch = Regex.Match(context, @"(\d+(?:\.\d+)?\s*(?:GB|MB|GiB|MiB))", RegexOptions.IgnoreCase);
+                var size = sizeMatch.Success ? sizeMatch.Value : "";
+
+                var title = text.Length > 5 ? text : episodeCode;
+
+                // Check for duplicate
+                if (results.Any(r => r.Title.Equals(title, StringComparison.OrdinalIgnoreCase) && r.SiteName == siteName))
+                    continue;
+
+                results.Add(new NzbSiteCrawlResult
+                {
+                    SiteName = siteName,
+                    Title = title.Length > 150 ? title.Substring(0, 150) + "..." : title,
+                    EpisodeCode = episodeCode,
+                    DownloadUrl = downloadUrl,
+                    Size = size,
+                    SearchUrl = searchUrl
+                });
+            }
+
+            debugInfo.Add($"[{siteName}] Anchors with episode codes: {anchorsWithEpCode}, Results found: {results.Count}");
+
+            // If anchor strategy worked, return
+            if (results.Any())
+            {
+                debugInfo.Add($"[{siteName}] Final result count: {results.Count}");
+                return (results, debugInfo);
+            }
+
+            // Strategy 2: Row-based approach (table rows, divs, list items)
+            // Pattern to find row-like containers: <tr>...</tr> or <div class="...row...">...</div>
+            var rowPatterns = new[]
+            {
+                @"<tr[^>]*>([\s\S]*?)</tr>",                                    // Table rows ([\s\S] matches newlines too)
+                @"<div[^>]*class=""[^""]*(?:row|item|result|release)[^""]*""[^>]*>([\s\S]*?)</div>(?=\s*<div|</)", // Div rows
+                @"<li[^>]*>([\s\S]*?)</li>",                                    // List items
+            };
+
+            foreach (var rowPattern in rowPatterns)
+            {
+                var rowMatches = Regex.Matches(html, rowPattern, RegexOptions.IgnoreCase);
+                debugInfo.Add($"[{siteName}] Row pattern found {rowMatches.Count} matches");
+
+                int rowsWithEpCode = 0;
+                int rowsWithUrl = 0;
+                int rowsWithBoth = 0;
+
+                foreach (Match rowMatch in rowMatches)
+                {
+                    var rowHtml = rowMatch.Groups[1].Value;
+
+                    // REQUIREMENT 1: Row must contain an episode code
+                    string episodeCode = null;
+                    foreach (var pattern in episodePatterns)
+                    {
+                        var epMatch = Regex.Match(rowHtml, pattern, RegexOptions.IgnoreCase);
+                        if (epMatch.Success)
+                        {
+                            var season = int.Parse(epMatch.Groups[1].Value);
+                            var episode = int.Parse(epMatch.Groups[2].Value);
+                            episodeCode = $"S{season:D2}E{episode:D2}";
+                            break;
+                        }
+                    }
+
+                    if (episodeCode != null) rowsWithEpCode++;
+
+                    // REQUIREMENT 2: Row must contain at least one URL (href with http)
+                    var urlPattern = @"href\s*=\s*[""'](https?://[^""']+)[""']";
+                    var urlMatches = Regex.Matches(rowHtml, urlPattern, RegexOptions.IgnoreCase);
+
+                    if (urlMatches.Count > 0) rowsWithUrl++;
+
+                    if (episodeCode == null || !unwatchedCodes.Contains(episodeCode)) continue;
+                    if (urlMatches.Count == 0) continue;
+
+                    rowsWithBoth++;
+
+                    // Extract title - find the longest text containing the episode code
+                    string title = null;
+
+                    // First try: Look for anchor tag text containing episode code
+                    var rowAnchorPattern = @"<a[^>]*>(.*?)</a>";
+                    var rowAnchorMatches = Regex.Matches(rowHtml, rowAnchorPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                    foreach (Match anchorMatch in rowAnchorMatches)
+                    {
+                        var anchorText = System.Net.WebUtility.HtmlDecode(anchorMatch.Groups[1].Value);
+                        anchorText = Regex.Replace(anchorText, @"<[^>]+>", " ").Trim();
+                        anchorText = Regex.Replace(anchorText, @"\s+", " ");
+
+                        // Check if this anchor contains the episode code
+                        foreach (var pattern in episodePatterns)
+                        {
+                            if (Regex.IsMatch(anchorText, pattern, RegexOptions.IgnoreCase))
+                            {
+                                if (title == null || anchorText.Length > title.Length)
+                                {
+                                    title = anchorText;
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // Fallback: Extract plain text containing episode code
+                    if (string.IsNullOrWhiteSpace(title) || title.Length < 10)
+                    {
+                        var textOnly = Regex.Replace(rowHtml, @"<[^>]+>", " ");
+                        textOnly = Regex.Replace(textOnly, @"\s+", " ").Trim();
+                        var codeMatch = Regex.Match(textOnly, @"(\S.{0,80}(?:S\d{1,2}E\d{1,2}|\d{1,2}x\d{2}).{0,40})", RegexOptions.IgnoreCase);
+                        if (codeMatch.Success)
+                        {
+                            title = codeMatch.Value.Trim();
+                        }
+                        else
+                        {
+                            title = episodeCode;
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(title) || title.Length < 3) continue;
+
+                    // Extract download URL - prioritize URLs containing download/get/nzb/api keywords
+                    var downloadUrl = "";
+                    var downloadKeywords = new[] { "get", "download", "nzb", "api", "cdn" };
+                    foreach (Match urlMatch in urlMatches)
+                    {
+                        var url = urlMatch.Groups[1].Value;
+                        if (downloadKeywords.Any(k => url.Contains(k, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            downloadUrl = url;
+                            break;
+                        }
+                    }
+
+                    // If no download-specific URL found, use the first URL as fallback
+                    if (string.IsNullOrEmpty(downloadUrl) && urlMatches.Count > 0)
+                    {
+                        downloadUrl = urlMatches[0].Groups[1].Value;
+                    }
+
+                    // Extract size
+                    var sizeMatch = Regex.Match(rowHtml, @"(\d+(?:\.\d+)?\s*(?:GB|MB|GiB|MiB))", RegexOptions.IgnoreCase);
+                    var size = sizeMatch.Success ? sizeMatch.Value : "";
+
+                    // Check for duplicate
+                    if (results.Any(r => r.Title.Equals(title, StringComparison.OrdinalIgnoreCase) && r.SiteName == siteName))
+                        continue;
+
+                    results.Add(new NzbSiteCrawlResult
+                    {
+                        SiteName = siteName,
+                        Title = title.Length > 150 ? title.Substring(0, 150) + "..." : title,
+                        EpisodeCode = episodeCode,
+                        DownloadUrl = downloadUrl,
+                        Size = size,
+                        SearchUrl = searchUrl
+                    });
+                }
+
+                debugInfo.Add($"[{siteName}] Row strategy - rows with ep: {rowsWithEpCode}, with URLs: {rowsWithUrl}, matching unwatched: {rowsWithBoth}");
+
+                // If we found results with this row pattern, don't try others
+                if (results.Any()) break;
+            }
+
+            debugInfo.Add($"[{siteName}] Final result count: {results.Count}");
+            return (results, debugInfo);
+        }
+
+        /// <summary>
+        /// Crawl NZB sites via RSS feeds. Only processes sites with RssApiKey configured.
+        /// Sites without RssApiKey are completely ignored.
+        /// </summary>
+        public async Task<NzbSiteCrawlSummary> CrawlNzbRssFeedsForShow(long showId)
+        {
+            var summary = new NzbSiteCrawlSummary();
+
+            var show = _db.Shows
+                .Include(s => s.Episodes)
+                .FirstOrDefault(s => s.Id == showId);
+
+            if (show == null)
+            {
+                summary.Errors.Add("Show not found");
+                return summary;
+            }
+
+            // Get unwatched episodes - include those airing in the next 2 days
+            var twoDaysFromNow = DateTimeOffset.UtcNow.AddDays(2);
+            var unwatchedEpisodes = (show.Episodes ?? new List<Episode>())
+                .Where(e => !e.Watched && !e.GivenUp && e.AirDateOffset2 < twoDaysFromNow)
+                .OrderByDescending(e => e.season)
+                .ThenByDescending(e => e.number)
+                .ToList();
+
+            if (!unwatchedEpisodes.Any())
+            {
+                summary.Errors.Add("No unwatched episodes to search for");
+                return summary;
+            }
+
+            // Get active TV sites that have RSS API key configured
+            // Sites without RssApiKey are completely skipped
+            var sites = _db.TVSites
+                .Where(s => s.Active && !string.IsNullOrEmpty(s.RssApiKey))
+                .OrderBy(s => s.Order)
+                .ToList();
+
+            if (!sites.Any())
+            {
+                summary.Errors.Add("No sites configured with RSS API keys");
+                return summary;
+            }
+
+            var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            httpClient.Timeout = TimeSpan.FromSeconds(30);
+
+            foreach (var site in sites)
+            {
+                var crawledInfo = new CrawledSiteInfo
+                {
+                    SiteName = site.Name ?? "Unknown",
+                    Url = ""
+                };
+
+                try
+                {
+                    var rssResults = await CrawlWithRssFeed(httpClient, site, show, unwatchedEpisodes, crawledInfo, summary);
+                    summary.Results.AddRange(rssResults);
+                    summary.CrawledUrls.Add(crawledInfo);
+                    if (crawledInfo.Success) summary.SitesCrawled++;
+                }
+                catch (TaskCanceledException)
+                {
+                    crawledInfo.Success = false;
+                    crawledInfo.ErrorMessage = "Timeout";
+                    summary.Errors.Add($"{site.Name}: Timeout");
+                    summary.CrawledUrls.Add(crawledInfo);
+                }
+                catch (Exception ex)
+                {
+                    crawledInfo.Success = false;
+                    crawledInfo.ErrorMessage = ex.Message;
+                    summary.Errors.Add($"{site.Name}: {ex.Message}");
+                    summary.CrawledUrls.Add(crawledInfo);
+                }
+            }
+
+            // Filter results to only unwatched episodes and deduplicate
+            var unwatchedCodes = unwatchedEpisodes.Select(e => e.EpNumberFormatted).ToHashSet();
+            summary.Results = summary.Results
+                .Where(r => unwatchedCodes.Any(code => r.EpisodeCode.Contains(code, StringComparison.OrdinalIgnoreCase)
+                    || r.Title.Contains(code, StringComparison.OrdinalIgnoreCase)))
+                .GroupBy(r => new { r.SiteName, r.Title })
+                .Select(g => g.First())
+                .OrderByDescending(r => r.EpisodeCode)
+                .ThenBy(r => r.SiteName)
+                .ToList();
+
+            summary.TotalResults = summary.Results.Count;
+            return summary;
+        }
+
+        /// <summary>
+        /// Crawl an NZB site using its RSS feed (requires RSS API key).
+        /// Most Newznab-compatible sites support RSS feeds at /rss or /api?t=search&dl=1
+        /// </summary>
+        private async Task<List<NzbSiteCrawlResult>> CrawlWithRssFeed(
+            HttpClient httpClient,
+            TVSite site,
+            Show show,
+            List<Episode> unwatchedEpisodes,
+            CrawledSiteInfo crawledInfo,
+            NzbSiteCrawlSummary summary)
+        {
+            var results = new List<NzbSiteCrawlResult>();
+
+            // Determine RSS base URL
+            var rssBase = site.RssBaseUrl;
+            if (string.IsNullOrEmpty(rssBase))
+            {
+                // Try to derive from ApiBaseUrl or URLTemplate
+                if (!string.IsNullOrEmpty(site.ApiBaseUrl))
+                {
+                    rssBase = site.ApiBaseUrl;
+                }
+                else if (!string.IsNullOrEmpty(site.URLTemplate))
+                {
+                    var uri = new Uri(site.URLTemplate.Split('?')[0].Split('{')[0]);
+                    rssBase = $"{uri.Scheme}://{uri.Host}";
+                    // Common API endpoints for specific sites
+                    if (uri.Host.Contains("nzbgeek", StringComparison.OrdinalIgnoreCase))
+                        rssBase = "https://api.nzbgeek.info";
+                }
+            }
+
+            if (string.IsNullOrEmpty(rssBase))
+            {
+                summary.DebugInfo.Add($"[{site.Name}] RSS: No RSS base URL configured or derivable");
+                crawledInfo.Success = false;
+                crawledInfo.ErrorMessage = "No RSS base URL";
+                return results;
+            }
+
+            // Build RSS feed URL for TV search
+            // Newznab RSS feed: /rss?t=5000&dl=1&i=ID&r=APIKEY or /api?t=search&apikey=KEY&q=ShowName&cat=5000
+            var showName = Uri.EscapeDataString(show.name ?? "");
+            var rssUrl = $"{rssBase}/api?t=tvsearch&r={site.RssApiKey}&q={showName}&cat=5000&dl=1";
+
+            crawledInfo.Url = rssUrl.Replace(site.RssApiKey!, "[HIDDEN]"); // Don't expose API key in UI
+            summary.DebugInfo.Add($"[{site.Name}] RSS: Using RSS feed");
+
+            try
+            {
+                var response = await httpClient.GetAsync(rssUrl);
+                crawledInfo.HttpStatus = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    crawledInfo.Success = false;
+                    crawledInfo.ErrorMessage = $"HTTP {(int)response.StatusCode}";
+                    summary.DebugInfo.Add($"[{site.Name}] RSS: HTTP {(int)response.StatusCode}");
+                    return results;
+                }
+
+                var xml = await response.Content.ReadAsStringAsync();
+                crawledInfo.Success = true;
+
+                // Parse RSS/Newznab XML response - reuse the existing parser
+                results = ParseRssFeedResponse(xml, site.Name ?? "Unknown", rssUrl, unwatchedEpisodes, summary);
+                summary.DebugInfo.Add($"[{site.Name}] RSS: Found {results.Count} results");
+            }
+            catch (Exception ex)
+            {
+                crawledInfo.Success = false;
+                crawledInfo.ErrorMessage = ex.Message;
+                summary.DebugInfo.Add($"[{site.Name}] RSS Error: {ex.Message}");
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Parse RSS feed XML response. Similar to ParseNewznabResponse but handles RSS-specific format.
+        /// </summary>
+        private List<NzbSiteCrawlResult> ParseRssFeedResponse(
+            string xml,
+            string siteName,
+            string feedUrl,
+            List<Episode> unwatchedEpisodes,
+            NzbSiteCrawlSummary summary)
+        {
+            var results = new List<NzbSiteCrawlResult>();
+
+            // Build unwatched episode codes
+            var unwatchedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ep in unwatchedEpisodes)
+            {
+                unwatchedCodes.Add(ep.EpNumberFormatted);
+                unwatchedCodes.Add($"S{ep.season}E{ep.number}");
+                unwatchedCodes.Add($"{ep.season}x{ep.number:D2}");
+            }
+
+            try
+            {
+                var doc = System.Xml.Linq.XDocument.Parse(xml);
+
+                // Check for error response
+                var error = doc.Descendants("error").FirstOrDefault();
+                if (error != null)
+                {
+                    var errorCode = error.Attribute("code")?.Value;
+                    var errorDesc = error.Attribute("description")?.Value;
+                    summary.DebugInfo.Add($"[{siteName}] RSS Error: {errorCode} - {errorDesc}");
+                    return results;
+                }
+
+                // Parse items (RSS feed items are typically under <channel><item>)
+                var items = doc.Descendants("item");
+                summary.DebugInfo.Add($"[{siteName}] RSS: Parsing {items.Count()} items from feed");
+
+                foreach (var item in items)
+                {
+                    var title = item.Element("title")?.Value ?? "";
+
+                    // RSS feeds may have link or enclosure for download URL
+                    var link = item.Element("link")?.Value ?? "";
+                    var enclosure = item.Element("enclosure");
+                    if (enclosure != null)
+                    {
+                        var enclosureUrl = enclosure.Attribute("url")?.Value;
+                        if (!string.IsNullOrEmpty(enclosureUrl))
+                            link = enclosureUrl;
+                    }
+
+                    var pubDate = item.Element("pubDate")?.Value;
+                    var size = "";
+
+                    // Get size from enclosure or newznab attributes
+                    if (enclosure != null)
+                    {
+                        var lengthAttr = enclosure.Attribute("length")?.Value;
+                        if (!string.IsNullOrEmpty(lengthAttr) && long.TryParse(lengthAttr, out var bytes))
+                        {
+                            size = bytes > 1_000_000_000 ? $"{bytes / 1_000_000_000.0:F2} GB" : $"{bytes / 1_000_000.0:F1} MB";
+                        }
+                    }
+
+                    // Also check newznab:attr elements (some feeds include these)
+                    var attrs = item.Elements().Where(e => e.Name.LocalName == "attr");
+                    foreach (var attr in attrs)
+                    {
+                        var name = attr.Attribute("name")?.Value;
+                        var value = attr.Attribute("value")?.Value;
+                        if (name == "size" && string.IsNullOrEmpty(size) && !string.IsNullOrEmpty(value) && long.TryParse(value, out var bytes))
+                        {
+                            size = bytes > 1_000_000_000 ? $"{bytes / 1_000_000_000.0:F2} GB" : $"{bytes / 1_000_000.0:F1} MB";
+                        }
+                    }
+
+                    // Extract episode code from title
+                    string? episodeCode = null;
+                    var epMatch = Regex.Match(title, @"S(\d{1,2})E(\d{1,2})", RegexOptions.IgnoreCase);
+                    if (epMatch.Success)
+                    {
+                        var season = int.Parse(epMatch.Groups[1].Value);
+                        var episode = int.Parse(epMatch.Groups[2].Value);
+                        episodeCode = $"S{season:D2}E{episode:D2}";
+                    }
+                    else
+                    {
+                        var altMatch = Regex.Match(title, @"(\d{1,2})x(\d{2})", RegexOptions.IgnoreCase);
+                        if (altMatch.Success)
+                        {
+                            var season = int.Parse(altMatch.Groups[1].Value);
+                            var episode = int.Parse(altMatch.Groups[2].Value);
+                            episodeCode = $"S{season:D2}E{episode:D2}";
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(episodeCode)) continue;
+                    if (!unwatchedCodes.Contains(episodeCode)) continue;
+
+                    results.Add(new NzbSiteCrawlResult
+                    {
+                        SiteName = siteName,
+                        Title = title.Length > 150 ? title.Substring(0, 150) + "..." : title,
+                        EpisodeCode = episodeCode,
+                        DownloadUrl = link,
+                        Size = size,
+                        PostDate = DateTime.TryParse(pubDate, out var dt) ? dt : null,
+                        SearchUrl = feedUrl.Replace(Regex.Match(feedUrl, @"r=[^&]+").Value, "r=[HIDDEN]")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                summary.DebugInfo.Add($"[{siteName}] RSS XML Parse Error: {ex.Message}");
+            }
+
+            return results;
+        }
+
+        // ── Show folder aliases ──
+
+        public List<ShowFolderAlias> GetFolderAliases(long showId)
+        {
+            return _db.ShowFolderAliases
+                .Where(a => a.ShowId == (int)showId)
+                .OrderBy(a => a.AliasName)
+                .ToList();
+        }
+
+        public async Task AddFolderAlias(long showId, string aliasName)
+        {
+            if (string.IsNullOrWhiteSpace(aliasName)) return;
+
+            var exists = _db.ShowFolderAliases
+                .Any(a => a.ShowId == (int)showId && a.AliasName == aliasName.Trim());
+            if (exists) return;
+
+            _db.ShowFolderAliases.Add(new ShowFolderAlias
+            {
+                ShowId = (int)showId,
+                AliasName = aliasName.Trim()
+            });
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task RemoveFolderAlias(int aliasId)
+        {
+            var alias = _db.ShowFolderAliases.Find(aliasId);
+            if (alias != null)
+            {
+                _db.ShowFolderAliases.Remove(alias);
+                await _db.SaveChangesAsync();
+            }
         }
     }
 }

@@ -18,17 +18,18 @@ else
         <h4>TV Directories</h4>
         <br />
         <div class="row fw-bold mb-2">
-            <div class="col-4">Name</div>
+            <div class="col-3">Name</div>
             <div class="col-2">Days To Scan (0 = skip)</div>
             <div class="col-2">Filter</div>
             <div class="col-2">Min File Size (bytes)</div>
+            <div class="col-1">Aliasable</div>
             <div class="col-2"></div>
         </div>
 
         @foreach (var dir in directories)
         {
             <div class="row mb-2">
-                <div class="col-4">
+                <div class="col-3">
                     <input type="text" class="form-control form-control-sm"
                            value="@GetEditState(dir.Id).Name"
                            @onchange="(e) => UpdateName(dir.Id, e.Value.ToString())" />
@@ -48,6 +49,11 @@ else
                            value="@GetEditState(dir.Id).MinFileSize"
                            @onchange="(e) => UpdateMinFileSize(dir.Id, e.Value.ToString())" />
                 </div>
+                <div class="col-1 d-flex align-items-center">
+                    <input type="checkbox" class="form-check-input"
+                           checked="@GetEditState(dir.Id).Aliasable"
+                           @onchange="(e) => UpdateAliasable(dir.Id, (bool)e.Value)" />
+                </div>
                 <div class="col-2">
                     <button class="btn btn-primary btn-sm" @onclick="() => SaveDir(dir.Id)">Save</button>
                     <button class="btn btn-danger btn-sm ms-1" @onclick="() => DeleteDir(dir.Id)">Del</button>
@@ -58,7 +64,7 @@ else
         <hr />
         <h5>Add New Directory</h5>
         <div class="row mb-2">
-            <div class="col-4">
+            <div class="col-3">
                 <input type="text" class="form-control form-control-sm" @bind="newDir.Name" placeholder="Directory path" />
             </div>
             <div class="col-2">
@@ -69,6 +75,9 @@ else
             </div>
             <div class="col-2">
                 <input type="text" class="form-control form-control-sm" @bind="newDir.MinFileSize" />
+            </div>
+            <div class="col-1 d-flex align-items-center">
+                <input type="checkbox" class="form-check-input" @bind="newDir.Aliasable" />
             </div>
             <div class="col-2">
                 <button class="btn btn-success btn-sm" @onclick="AddDir">Add</button>
@@ -85,7 +94,7 @@ else
 @code {
     private List<TVDirectories> directories;
     private Dictionary<int, DirEditState> editStates = new();
-    private DirEditState newDir = new() { Name = "", DaysToScan = "7", Filter = "*.*", MinFileSize = "50000" };
+    private DirEditState newDir = new() { Name = "", DaysToScan = "7", Filter = "*.*", MinFileSize = "50000", Aliasable = false };
     private string statusMessage;
 
     private class DirEditState
@@ -94,6 +103,7 @@ else
         public string DaysToScan { get; set; }
         public string Filter { get; set; }
         public string MinFileSize { get; set; }
+        public bool Aliasable { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -112,7 +122,8 @@ else
                 Name = dir.Name ?? "",
                 DaysToScan = dir.DaysToScan.ToString(),
                 Filter = dir.Filter ?? "*.*",
-                MinFileSize = dir.MinFileSize.ToString()
+                MinFileSize = dir.MinFileSize.ToString(),
+                Aliasable = dir.Aliasable
             };
         }
     }
@@ -142,6 +153,11 @@ else
         if (editStates.ContainsKey(id)) editStates[id].MinFileSize = value;
     }
 
+    private void UpdateAliasable(int id, bool value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].Aliasable = value;
+    }
+
     private async Task SaveDir(int id)
     {
         var state = GetEditState(id);
@@ -149,7 +165,7 @@ else
         {
             int.TryParse(state.DaysToScan, out int days);
             int.TryParse(state.MinFileSize, out int minSize);
-            await AppService.TVDirectoryUpdate(id, state.Name, days, state.Filter, minSize);
+            await AppService.TVDirectoryUpdate(id, state.Name, days, state.Filter, minSize, state.Aliasable);
             statusMessage = $"Saved: {state.Name}";
             await LoadData();
         }
@@ -168,9 +184,9 @@ else
         {
             int.TryParse(newDir.DaysToScan, out int days);
             int.TryParse(newDir.MinFileSize, out int minSize);
-            await AppService.TVDirectoryUpdate(-1, newDir.Name, days, newDir.Filter, minSize);
+            await AppService.TVDirectoryUpdate(-1, newDir.Name, days, newDir.Filter, minSize, newDir.Aliasable);
             statusMessage = $"Added: {newDir.Name}";
-            newDir = new DirEditState { Name = "", DaysToScan = "7", Filter = "*.*", MinFileSize = "50000" };
+            newDir = new DirEditState { Name = "", DaysToScan = "7", Filter = "*.*", MinFileSize = "50000", Aliasable = false };
             await LoadData();
         }
     }

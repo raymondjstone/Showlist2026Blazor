@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Showlist2026.Data;
 
@@ -11,9 +12,11 @@ using Showlist2026.Data;
 namespace Showlist2026.Data.Migrations
 {
     [DbContext(typeof(ShowlistDbContext))]
-    partial class ShowlistDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260327141341_AddRssApiKeyToTVSites")]
+    partial class AddRssApiKeyToTVSites
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -313,28 +316,6 @@ namespace Showlist2026.Data.Migrations
                     b.ToTable("Show");
                 });
 
-            modelBuilder.Entity("Showlist2026.Entities.ShowFolderAlias", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AliasName")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("ShowId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ShowId");
-
-                    b.ToTable("ShowFolderAliases");
-                });
-
             modelBuilder.Entity("Showlist2026.Entities.TVDirectories", b =>
                 {
                     b.Property<int>("Id")
@@ -342,9 +323,6 @@ namespace Showlist2026.Data.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("Aliasable")
-                        .HasColumnType("bit");
 
                     b.Property<int>("DaysToScan")
                         .HasColumnType("int");
@@ -594,17 +572,6 @@ namespace Showlist2026.Data.Migrations
                     b.Navigation("WebNetworks");
                 });
 
-            modelBuilder.Entity("Showlist2026.Entities.ShowFolderAlias", b =>
-                {
-                    b.HasOne("Showlist2026.Entities.Show", "Show")
-                        .WithMany("FolderAliases")
-                        .HasForeignKey("ShowId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Show");
-                });
-
             modelBuilder.Entity("Showlist2026.Entities.TouchFile", b =>
                 {
                     b.HasOne("Showlist2026.Entities.Episode", "Episode")
@@ -637,8 +604,6 @@ namespace Showlist2026.Data.Migrations
             modelBuilder.Entity("Showlist2026.Entities.Show", b =>
                 {
                     b.Navigation("Episodes");
-
-                    b.Navigation("FolderAliases");
 
                     b.Navigation("Genres");
                 });

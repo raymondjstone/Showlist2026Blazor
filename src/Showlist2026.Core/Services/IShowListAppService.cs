@@ -43,10 +43,11 @@ namespace Showlist2026.Services
         Task<List<FileInfo>> Dirlist(string dirName, int daysOldToAllow, string filter = "*.*", int minSizeAllowed = 50000);
         Task<List<TouchFile>> ShowDownloaded(int year = 0);
         Task<NzBplanetJSON> NZBPlanetSearch(Show show);
-        Task TVSiteUpdate(int id, bool active, int order, string name, string urltemplate);
+        Task TVSiteUpdate(int id, bool active, int order, string name, string urltemplate, 
+            string apiKey = "", string apiBaseUrl = "", string rssApiKey = "", string rssBaseUrl = "");
         Task TVSiteDelete(int id);
         List<TVDirectories> TvDirectories();
-        Task TVDirectoryUpdate(int id, string name, int daysToScan, string filter, int minFileSize);
+        Task TVDirectoryUpdate(int id, string name, int daysToScan, string filter, int minFileSize, bool aliasable = false);
         Task TVDirectoryDelete(int id);
         Task CheckNewSeasonNotifications();
 
@@ -107,5 +108,16 @@ namespace Showlist2026.Services
         // Dedupe: find duplicate episode files across TV directories
         List<DuplicateFileEntry> FindDuplicateEpisodeFiles();
         bool DeleteFile(string filePath);
+
+        // NZB site crawling for unwatched episodes
+        Task<NzbSiteCrawlSummary> CrawlNzbSitesForShow(long showId);
+
+        // NZB RSS feed crawling - uses RSS API keys, skips sites without RSS key configured
+        Task<NzbSiteCrawlSummary> CrawlNzbRssFeedsForShow(long showId);
+
+        // Show folder aliases
+        List<ShowFolderAlias> GetFolderAliases(long showId);
+        Task AddFolderAlias(long showId, string aliasName);
+        Task RemoveFolderAlias(int aliasId);
     }
 }

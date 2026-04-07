@@ -21,6 +21,7 @@ namespace Showlist2026.Data
         public DbSet<TouchFile> TouchFiles { get; set; }
         public DbSet<TouchFolder> TouchFolder { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
+        public DbSet<ShowFolderAlias> ShowFolderAliases { get; set; }
 
         public ShowlistDbContext(DbContextOptions<ShowlistDbContext> options)
             : base(options)

@@ -14,6 +14,7 @@ namespace Showlist2026.Entities
         public int  DaysToScan { get; set; }
         public string? Filter { get; set; }
         public int MinFileSize { get; set; }
+        public bool Aliasable { get; set; }
 
     }
 }

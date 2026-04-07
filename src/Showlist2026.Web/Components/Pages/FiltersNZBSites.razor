@@ -16,62 +16,174 @@ else
 {
     <div class="container-fluid">
         <h4>NZB Sites</h4>
+        <p class="text-muted small">Configure API Key for search crawling, RSS API Key for RSS feed crawling. Sites without RSS API Key are skipped during RSS crawls.</p>
         <br />
-        <div class="row fw-bold mb-2">
-            <div class="col-1">Active</div>
-            <div class="col-1">Order</div>
-            <div class="col-2">Name</div>
-            <div class="col-7">URL Template</div>
-            <div class="col-1"></div>
-        </div>
 
         @foreach (var site in tvSites)
         {
-            <div class="row mb-2">
-                <div class="col-1">
-                    <input type="checkbox" class="form-check-input"
-                           checked="@GetSiteEditState(site.Id).Active"
-                           @onchange="(e) => UpdateSiteActive(site.Id, (bool)e.Value)" />
-                </div>
-                <div class="col-1">
-                    <input type="text" class="form-control form-control-sm"
-                           value="@GetSiteEditState(site.Id).Order"
-                           @onchange="(e) => UpdateSiteOrder(site.Id, e.Value.ToString())" />
-                </div>
-                <div class="col-2">
-                    <input type="text" class="form-control form-control-sm"
-                           value="@GetSiteEditState(site.Id).Name"
-                           @onchange="(e) => UpdateSiteName(site.Id, e.Value.ToString())" />
-                </div>
-                <div class="col-7">
-                    <input type="text" class="form-control form-control-sm"
-                           value="@GetSiteEditState(site.Id).URLTemplate"
-                           @onchange="(e) => UpdateSiteUrl(site.Id, e.Value.ToString())" />
-                </div>
-                <div class="col-1">
-                    <button class="btn btn-primary btn-sm" @onclick="() => SaveSite(site.Id)">Save</button>
-                    <button class="btn btn-danger btn-sm ms-1" @onclick="() => DeleteSite(site.Id)">Del</button>
+            <div class="card mb-3">
+                <div class="card-body py-2">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <input type="checkbox" class="form-check-input"
+                                   checked="@GetSiteEditState(site.Id).Active"
+                                   @onchange="(e) => UpdateSiteActive(site.Id, (bool)e.Value)" />
+                        </div>
+                        <div class="col-1">
+                            <input type="text" class="form-control form-control-sm" placeholder="Order"
+                                   value="@GetSiteEditState(site.Id).Order"
+                                   @onchange="(e) => UpdateSiteOrder(site.Id, e.Value.ToString())" />
+                        </div>
+                        <div class="col-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Name"
+                                   value="@GetSiteEditState(site.Id).Name"
+                                   @onchange="(e) => UpdateSiteName(site.Id, e.Value.ToString())" />
+                        </div>
+                        <div class="col">
+                            <input type="text" class="form-control form-control-sm" placeholder="URL Template"
+                                   value="@GetSiteEditState(site.Id).URLTemplate"
+                                   @onchange="(e) => UpdateSiteUrl(site.Id, e.Value.ToString())" />
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-primary btn-sm" @onclick="() => SaveSite(site.Id)">Save</button>
+                            <button class="btn btn-danger btn-sm ms-1" @onclick="() => DeleteSite(site.Id)">Del</button>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-3">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" title="API Key for Newznab search">API Key</span>
+                                <input type="password" class="form-control" placeholder="(optional)"
+                                       value="@GetSiteEditState(site.Id).ApiKey"
+                                       @onchange="(e) => UpdateSiteApiKey(site.Id, e.Value.ToString())" />
+                            </div>
+                        </div>
+                        <div class="col-2">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Base</span>
+                                <input type="text" class="form-control" placeholder="Auto"
+                                       value="@GetSiteEditState(site.Id).ApiBaseUrl"
+                                       @onchange="(e) => UpdateSiteApiBaseUrl(site.Id, e.Value.ToString())" />
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" title="RSS API Key - required for RSS feed crawling">RSS Key</span>
+                                <input type="password" class="form-control" placeholder="(for RSS crawl)"
+                                       value="@GetSiteEditState(site.Id).RssApiKey"
+                                       @onchange="(e) => UpdateSiteRssApiKey(site.Id, e.Value.ToString())" />
+                            </div>
+                        </div>
+                        <div class="col-2">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">RSS Base</span>
+                                <input type="text" class="form-control" placeholder="Auto"
+                                       value="@GetSiteEditState(site.Id).RssBaseUrl"
+                                       @onchange="(e) => UpdateSiteRssBaseUrl(site.Id, e.Value.ToString())" />
+                            </div>
+                        </div>
+                        <div class="col-2 text-muted small align-self-center">
+                            @if (!string.IsNullOrEmpty(GetSiteEditState(site.Id).RssApiKey))
+                            {
+                                <span class="badge bg-success">RSS Enabled</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No RSS</span>
+                            }
+                        </div>
+                    </div>
                 </div>
             </div>
         }
 
         <hr />
         <h5>Add New Site</h5>
-        <div class="row mb-2">
-            <div class="col-1">
-                <input type="checkbox" class="form-check-input" @bind="newSite.Active" />
+        <div class="card">
+            <div class="card-body py-2">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <input type="checkbox" class="form-check-input" @bind="newSite.Active" />
+                    </div>
+                    <div class="col-1">
+                        <input type="text" class="form-control form-control-sm" placeholder="Order" @bind="newSite.Order" />
+                    </div>
+                    <div class="col-2">
+                        <input type="text" class="form-control form-control-sm" placeholder="Name" @bind="newSite.Name" />
+                    </div>
+                    <div class="col">
+                        <input type="text" class="form-control form-control-sm" placeholder="URL Template" @bind="newSite.URLTemplate" />
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-success btn-sm" @onclick="AddSite">Add</button>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">API Key</span>
+                            <input type="password" class="form-control" placeholder="(optional)" @bind="newSite.ApiKey" />
+                        </div>
+                    </div>
+                    <div class="col-2">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">Base</span>
+                            <input type="text" class="form-control" placeholder="Auto" @bind="newSite.ApiBaseUrl" />
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">RSS Key</span>
+                            <input type="password" class="form-control" placeholder="(for RSS crawl)" @bind="newSite.RssApiKey" />
+                        </div>
+                    </div>
+                    <div class="col-2">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">RSS Base</span>
+                            <input type="text" class="form-control" placeholder="Auto" @bind="newSite.RssBaseUrl" />
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="col-1">
-                <input type="text" class="form-control form-control-sm" @bind="newSite.Order" />
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">URL Template Placeholders &amp; Examples</h6>
             </div>
-            <div class="col-2">
-                <input type="text" class="form-control form-control-sm" @bind="newSite.Name" />
-            </div>
-            <div class="col-7">
-                <input type="text" class="form-control form-control-sm" @bind="newSite.URLTemplate" />
-            </div>
-            <div class="col-1">
-                <button class="btn btn-success btn-sm" @onclick="AddSite">Add</button>
+            <div class="card-body">
+                <p class="small text-muted mb-2">Use these placeholders in your URL templates. They will be replaced with the show's search terms:</p>
+                <ul class="small mb-3">
+                    <li><code>{URLSearchTermNameOnly}</code> - Show name with spaces (e.g., "Breaking Bad")</li>
+                    <li><code>{URLSearchTerm}</code> - Show name with TV category filter (e.g., "Breaking Bad?t=5000")</li>
+                    <li><code>{URLSearchTermGeekSeek}</code> - Show name formatted for GeekSeek sites</li>
+                </ul>
+                <p class="small text-muted mb-2"><strong>Example Site Configurations:</strong></p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered small mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Site Name</th>
+                                <th>URL Template</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var example in exampleSites)
+                            {
+                                <tr>
+                                    <td>@example.Name</td>
+                                    <td class="font-monospace" style="font-size:0.75rem;">@example.URLTemplate</td>
+                                    <td>
+                                        <button class="btn btn-outline-primary btn-sm" @onclick="() => UseExample(example)">
+                                            <i class="fas fa-plus"></i> Use
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -94,7 +206,22 @@ else
         public string Order { get; set; }
         public string Name { get; set; }
         public string URLTemplate { get; set; }
+        public string ApiKey { get; set; } = "";
+        public string ApiBaseUrl { get; set; } = "";
+        public string RssApiKey { get; set; } = "";
+        public string RssBaseUrl { get; set; } = "";
     }
+
+    // Example site configurations for common NZB indexers
+    // Note: {URLSearchTermNameOnly} will be URL-encoded automatically (spaces become %20)
+    private readonly List<SiteEditState> exampleSites =
+    [
+        new() { Name = "NZBGeek", URLTemplate = "https://nzbgeek.info/geekseek.php?moviesgeekseek=1&c=5000&browseincludewords={URLSearchTermGeekSeek}", Active = true },
+        new() { Name = "NZBs.in", URLTemplate = "https://nzbs.in/search?q={URLSearchTermNameOnly}&t=5000", Active = true },
+        new() { Name = "NZBPlanet", URLTemplate = "https://nzbplanet.net/api?t=tvsearch&q={URLSearchTermNameOnly}", Active = true },
+        new() { Name = "NZBFinder", URLTemplate = "https://nzbfinder.ws/search?q={URLSearchTermNameOnly}&t=5000", Active = true },
+        new() { Name = "DrunkenSlug", URLTemplate = "https://drunkenslug.com/api?t=tvsearch&q={URLSearchTermNameOnly}", Active = true },
+    ];
 
     protected override async Task OnInitializedAsync()
     {
@@ -112,13 +239,25 @@ else
                 Active = site.Active,
                 Order = site.Order.ToString(),
                 Name = site.Name,
-                URLTemplate = site.URLTemplate
+                URLTemplate = site.URLTemplate,
+                ApiKey = site.ApiKey ?? "",
+                ApiBaseUrl = site.ApiBaseUrl ?? "",
+                RssApiKey = site.RssApiKey ?? "",
+                RssBaseUrl = site.RssBaseUrl ?? ""
             };
         }
         if (tvSites.Any())
         {
             newSite.Order = (tvSites.Max(a => a.Order) + 1).ToString();
         }
+    }
+
+    private void UseExample(SiteEditState example)
+    {
+        newSite.Name = example.Name;
+        newSite.URLTemplate = example.URLTemplate;
+        newSite.Active = true;
+        statusMessage = $"Example loaded: {example.Name} - Click 'Add' to save";
     }
 
     private SiteEditState GetSiteEditState(int id)
@@ -146,13 +285,34 @@ else
         if (editStates.ContainsKey(id)) editStates[id].URLTemplate = value;
     }
 
+    private void UpdateSiteApiKey(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].ApiKey = value;
+    }
+
+    private void UpdateSiteApiBaseUrl(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].ApiBaseUrl = value;
+    }
+
+    private void UpdateSiteRssApiKey(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].RssApiKey = value;
+    }
+
+    private void UpdateSiteRssBaseUrl(int id, string value)
+    {
+        if (editStates.ContainsKey(id)) editStates[id].RssBaseUrl = value;
+    }
+
     private async Task SaveSite(int id)
     {
         var state = GetSiteEditState(id);
         if (!string.IsNullOrEmpty(state.Name))
         {
             int.TryParse(state.Order, out int order);
-            await AppService.TVSiteUpdate(id, state.Active, order, state.Name, state.URLTemplate);
+            await AppService.TVSiteUpdate(id, state.Active, order, state.Name, state.URLTemplate, 
+                state.ApiKey, state.ApiBaseUrl, state.RssApiKey, state.RssBaseUrl);
             statusMessage = $"Saved: {state.Name}";
             await LoadData();
         }
@@ -170,9 +330,10 @@ else
         if (!string.IsNullOrEmpty(newSite.Name))
         {
             int.TryParse(newSite.Order, out int order);
-            await AppService.TVSiteUpdate(-1, newSite.Active, order, newSite.Name, newSite.URLTemplate);
+            await AppService.TVSiteUpdate(-1, newSite.Active, order, newSite.Name, newSite.URLTemplate, 
+                newSite.ApiKey, newSite.ApiBaseUrl, newSite.RssApiKey, newSite.RssBaseUrl);
             statusMessage = $"Added: {newSite.Name}";
-            newSite = new SiteEditState { Order = "99", Name = "", URLTemplate = "", Active = true };
+            newSite = new SiteEditState { Order = "99", Name = "", URLTemplate = "", Active = true, ApiKey = "", ApiBaseUrl = "", RssApiKey = "", RssBaseUrl = "" };
             await LoadData();
         }
     }

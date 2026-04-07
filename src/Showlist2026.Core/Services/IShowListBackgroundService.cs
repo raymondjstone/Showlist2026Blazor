@@ -21,5 +21,6 @@ namespace Showlist2026.Services
         int GetEstimatedPageMax();
         Task<bool> ShowDownloadedJob();
         Task<bool> ScanDirectoryFull(string directory);
+        Task<bool> ResolveAliasFolders();
     }
 }

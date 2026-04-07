@@ -59,6 +59,7 @@
                                     <th>File Name</th>
                                     <th>Directory</th>
                                     <th class="text-end">Size</th>
+                                    <th class="text-end">Date</th>
                                     <th class="text-center" style="width:100px;">Action</th>
                                 </tr>
                             </thead>
@@ -69,6 +70,7 @@
                                         <td class="small text-break">@file.FileName</td>
                                         <td class="small text-break text-muted">@file.Directory</td>
                                         <td class="text-end small text-nowrap">@FormatSize(file.FileSize)</td>
+                                        <td class="text-end small text-nowrap">@file.FileDate.ToString("yyyy-MM-dd")</td>
                                         <td class="text-center">
                                             @if (canDelete)
                                             {

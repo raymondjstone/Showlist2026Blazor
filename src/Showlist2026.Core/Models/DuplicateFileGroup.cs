@@ -9,5 +9,6 @@ public class DuplicateFileEntry
     public string Directory { get; set; } = "";
     public string FileName { get; set; } = "";
     public long FileSize { get; set; }
+    public DateTime FileDate { get; set; }
     public string GroupKey => $"{ShowFolderName.ToLower()}|S{Season:D2}E{Episode:D2}";
 }

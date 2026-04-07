@@ -1428,6 +1428,131 @@ namespace Showlist2026.Services
             return t1;
         }
 
+        /// <summary>
+        /// Scans aliasable TV directories for folders matching show aliases.
+        /// When an alias folder is found, renames it to the real show folder name.
+        /// If the real folder already exists, merges contents (moves season/show sub-folders).
+        /// </summary>
+        public async Task<bool> ResolveAliasFolders()
+        {
+            try
+            {
+                var aliasableDirs = _db.TVDirectories
+                    .Where(d => d.Aliasable)
+                    .ToList();
+
+                if (!aliasableDirs.Any())
+                {
+                    _logger.LogInformation("ResolveAliasFolders: No aliasable directories configured.");
+                    return true;
+                }
+
+                var aliases = _db.ShowFolderAliases
+                    .Include(a => a.Show)
+                    .Where(a => a.Show != null)
+                    .ToList();
+
+                if (!aliases.Any())
+                {
+                    _logger.LogInformation("ResolveAliasFolders: No aliases defined.");
+                    return true;
+                }
+
+                foreach (var tvDir in aliasableDirs)
+                {
+                    if (string.IsNullOrEmpty(tvDir.Name) || !Directory.Exists(tvDir.Name))
+                    {
+                        _logger.LogWarning("ResolveAliasFolders: Directory does not exist: {Dir}", tvDir.Name);
+                        continue;
+                    }
+
+                    var rootPath = tvDir.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                    foreach (var alias in aliases)
+                    {
+                        var realFolderName = alias.Show!.FolderName ?? alias.Show.DefaultFolderName;
+                        if (string.IsNullOrEmpty(realFolderName)) continue;
+
+                        var aliasPath = Path.Combine(rootPath, alias.AliasName);
+                        if (!Directory.Exists(aliasPath)) continue;
+
+                        var realPath = Path.Combine(rootPath, realFolderName);
+
+                        _logger.LogInformation("ResolveAliasFolders: Found alias folder '{Alias}' -> '{Real}' in {Dir}",
+                            alias.AliasName, realFolderName, tvDir.Name);
+
+                        if (!Directory.Exists(realPath))
+                        {
+                            // Simple rename — target doesn't exist
+                            Directory.Move(aliasPath, realPath);
+                            _logger.LogInformation("ResolveAliasFolders: Renamed '{Alias}' to '{Real}'",
+                                aliasPath, realPath);
+                        }
+                        else
+                        {
+                            // Merge: move all sub-folders/files from alias into real folder
+                            MergeDirectory(aliasPath, realPath);
+                            _logger.LogInformation("ResolveAliasFolders: Merged '{Alias}' into '{Real}'",
+                                aliasPath, realPath);
+                        }
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ResolveAliasFolders failed");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Recursively moves all contents from source into destination, then removes the empty source directory.
+        /// </summary>
+        private void MergeDirectory(string source, string destination)
+        {
+            // Move files
+            foreach (var file in Directory.GetFiles(source))
+            {
+                var destFile = Path.Combine(destination, Path.GetFileName(file));
+                if (!File.Exists(destFile))
+                {
+                    File.Move(file, destFile);
+                }
+                else
+                {
+                    _logger.LogWarning("ResolveAliasFolders: File already exists, skipping: {File}", destFile);
+                }
+            }
+
+            // Move sub-directories (season folders)
+            foreach (var dir in Directory.GetDirectories(source))
+            {
+                var dirName = Path.GetFileName(dir);
+                var destDir = Path.Combine(destination, dirName);
+
+                if (!Directory.Exists(destDir))
+                {
+                    Directory.Move(dir, destDir);
+                }
+                else
+                {
+                    // Recursively merge sub-directory contents
+                    MergeDirectory(dir, destDir);
+                }
+            }
+
+            // Remove the now-empty alias folder
+            if (!Directory.EnumerateFileSystemEntries(source).Any())
+            {
+                Directory.Delete(source);
+            }
+            else
+            {
+                _logger.LogWarning("ResolveAliasFolders: Source folder not empty after merge, skipping delete: {Dir}", source);
+            }
+        }
 
     }
 }
