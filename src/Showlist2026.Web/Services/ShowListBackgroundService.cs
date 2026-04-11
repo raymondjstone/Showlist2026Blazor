@@ -1102,6 +1102,7 @@ namespace Showlist2026.Services
             {
                 _logger.LogWarning(e, "Failed to scan TV directories");
             }
+            _logger.LogInformation("ShowDownloadedJob: {FileCount} files to scan", filesToScan.Count);
             int filenum = 0;
             foreach (var f in filesToScan)
             {
@@ -1163,15 +1164,33 @@ namespace Showlist2026.Services
                         {
                             show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.name) && u.name.ToLower() == showdir.ToLower());
                         }
+                        if (show == null)
+                        {
+                            show = UserShows.FirstOrDefault(u => u.DefaultFolderName.ToLower().Trim() == showdir.ToLower().Trim());
+                        }
+
+                        if (show == null)
+                        {
+                            _logger.LogWarning("ShowDownloadedJob: No show match for folder '{ShowDir}' (file: {FileName})", showdir, fileinfo.Name);
+                        }
 
                         // If no show then no point in parsing any more
                         if (show != null)
                         {
                             var parsed = EpisodeNameParser.Parse(fileinfo.Name);
+                            if (parsed == null)
+                            {
+                                _logger.LogWarning("ShowDownloadedJob: Failed to parse episode from '{FileName}' for show '{ShowName}'", fileinfo.Name, show.name);
+                            }
                             if (parsed != null)
                             {
                                 episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == parsed.Value.episode
                                 && e.season == parsed.Value.season);
+                                if (episode == null)
+                                {
+                                    _logger.LogWarning("ShowDownloadedJob: No episode found for {ShowName} S{Season}E{Episode} (file: {FileName})",
+                                        show.name, parsed.Value.season, parsed.Value.episode, fileinfo.Name);
+                                }
                             }
 
                             if (episode != null)
@@ -1318,6 +1337,10 @@ namespace Showlist2026.Services
                         if (show == null)
                         {
                             show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.name) && u.name.ToLower() == showdir.ToLower());
+                        }
+                        if (show == null)
+                        {
+                            show = UserShows.FirstOrDefault(u => u.DefaultFolderName.ToLower().Trim() == showdir.ToLower().Trim());
                         }
 
                         if (show != null)
