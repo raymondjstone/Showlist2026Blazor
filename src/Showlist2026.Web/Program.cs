@@ -52,6 +52,9 @@ builder.Services.AddHangfire(config => config
     }));
 builder.Services.AddHangfireServer();
 
+// MVC Controllers (for RSS endpoints)
+builder.Services.AddControllers();
+
 // Blazor
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -101,9 +104,10 @@ RecurringJob.AddOrUpdate<IShowListBackgroundService>(
     "RefreshShowDates", s => s.RefreshShowDates(), "06 * * * *");
 RecurringJob.AddOrUpdate<IShowListAppService>(
     "NewSeasonNotifications", s => s.CheckNewSeasonNotifications(), "0 8 * * *");
-RecurringJob.AddOrUpdate<IShowListBackgroundService>(
+    RecurringJob.AddOrUpdate<IShowListBackgroundService>(
     "ResolveAliasFolders", s => s.ResolveAliasFolders(), "5,15,25,35,45,55 * * * *");
 
+app.MapControllers();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
