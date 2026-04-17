@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject IShowListAppService AppService
 @using Showlist2026.NZBPlanetApiJSON
+@using Showlist2026.Models
 
 <PageTitle>@(show?.name ?? "Show")</PageTitle>
 
@@ -147,6 +148,38 @@ else
                         <span class="text-success ms-2 small">Saved</span>
                     }
                 </div>
+
+                @if (existingFolders != null && existingFolders.Any())
+                {
+                    <div class="alert alert-warning mt-3 py-2">
+                        <b><i class="fas fa-folder-open"></i> Existing folders found that may match this show:</b>
+                        <table class="table table-sm table-bordered mt-2 mb-0 small">
+                            <thead>
+                                <tr>
+                                    <th>Folder</th>
+                                    <th>Path</th>
+                                    <th>Date</th>
+                                    <th>Earliest</th>
+                                    <th>Latest</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var ef in existingFolders)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold">
+                                            <a href="file:////@ef.FullPath.Replace('\\', '/')" target="_blank" title="@ef.FullPath">@ef.FolderName</a>
+                                        </td>
+                                        <td class="text-muted small">@ef.FullPath</td>
+                                        <td>@ef.FolderDate.ToString("dd MMM yyyy")</td>
+                                        <td>@(ef.EarliestEpisode ?? "-")</td>
+                                        <td>@(ef.LatestEpisode ?? "-")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
 
                 @if (showWithSameName.Count > 0)
                 {
@@ -501,6 +534,7 @@ else
     private bool isCrawling;
     private NzbSiteCrawlSummary? crawlSummary;
     private List<ShowFolderAlias> folderAliases = new();
+    private List<ExistingFolderMatch>? existingFolders;
     private bool showAliasInput;
     private string newAliasName = "";
 
@@ -601,24 +635,24 @@ else
         }
 
         // NZB search
-        try
-        {
-            if (show.Episodes != null && show.Episodes.Any(f => !f.Watched))
-            {
-                NZBFound = await AppService.NZBPlanetSearch(show);
-                if (NZBFound?.Channel?.Item != null)
-                {
-                    var unwatched = show.Episodes.Where(f => !f.Watched).Select(f => f.EpNumberFormatted);
-                    NZBFound.Channel.Item = NZBFound.Channel.Item
-                        .Where(z => unwatched.Any(u => u == z.EpNumberFormatted))
-                        .OrderByDescending(e => e.EpNumberFormatted)
-                        .ThenBy(e => e.Sortkey)
-                        .ThenBy(e => e.SizeAsNumber)
-                        .ToList();
-                }
-            }
-        }
-        catch { }
+        // try
+        // {
+        //     if (show.Episodes != null && show.Episodes.Any(f => !f.Watched))
+        //     {
+        //         NZBFound = await AppService.NZBPlanetSearch(show);
+        //         if (NZBFound?.Channel?.Item != null)
+        //         {
+        //             var unwatched = show.Episodes.Where(f => !f.Watched).Select(f => f.EpNumberFormatted);
+        //             NZBFound.Channel.Item = NZBFound.Channel.Item
+        //                 .Where(z => unwatched.Any(u => u == z.EpNumberFormatted))
+        //                 .OrderByDescending(e => e.EpNumberFormatted)
+        //                 .ThenBy(e => e.Sortkey)
+        //                 .ThenBy(e => e.SizeAsNumber)
+        //                 .ToList();
+        //         }
+        //     }
+        // }
+        // catch { }
 
         var thisFolder = show.FolderName ?? show.DefaultFolderName;
         showWithSameName = AppService.showlist(show.name)
@@ -632,6 +666,12 @@ else
         notesSaved = false;
         try { similarShows = AppService.GetSimilarShows(show.Id, 5); } catch { similarShows = new(); }
         folderAliases = AppService.GetFolderAliases(show.Id);
+
+        // Check for existing folders on disk when show is undecided
+        //if (show.Wanted == null)
+            existingFolders = AppService.FindExistingFolders(show, folderAliases);
+        //else
+            //existingFolders = null;
     }
 
     private void SetActiveSeasonTab(long? season)

@@ -2182,7 +2182,7 @@ namespace Showlist2026.Services
                     && ext != ".mpg" && ext != ".mpeg" && ext != ".webm")
                 { linesSkipped++; continue; }
 
-                var epParsed = EpisodeNameParser.Parse(fileName);
+                var epParsed = EpisodeNameParser.ParseFirst(fileName);
                 long? seasonNum = epParsed?.season;
                 long? episodeNum = epParsed?.episode;
 
@@ -2350,7 +2350,7 @@ namespace Showlist2026.Services
                 {
                     if (fi.DirectoryName == null || fi.DirectoryName.Length <= 5) continue;
 
-                    var parsed = EpisodeNameParser.Parse(fi.Name);
+                    var parsed = EpisodeNameParser.ParseFirst(fi.Name);
                     if (parsed == null || parsed.Value.episode == 0 || parsed.Value.season == 0) continue;
 
                     var dirsplit = fi.DirectoryName.ToLower().Split(Path.DirectorySeparatorChar);
@@ -3308,6 +3308,134 @@ namespace Showlist2026.Services
             }
 
             return results;
+        }
+
+        // ── Existing folder detection for undecided shows ──
+
+        public List<ExistingFolderMatch> FindExistingFolders(Show show, List<ShowFolderAlias> aliases)
+        {
+            var root = _options.TvNameListPath;
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+                return new();
+
+            // Build set of names to match (case-insensitive)
+            var namesToMatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrEmpty(show.name))
+                namesToMatch.Add(show.name);
+
+            // Add all folder name variants and year permutations
+            var yearRegexBare = new System.Text.RegularExpressions.Regex(@"^(.+)\s+(\d{4})$");
+            var yearRegexParen = new System.Text.RegularExpressions.Regex(@"^(.+)\s+\((\d{4})\)$");
+            var folderCandidates = new[] { show.DefaultFolderName, show.SuggestedFolderName, show.FolderName };
+            foreach (var folder in folderCandidates)
+            {
+                if (string.IsNullOrEmpty(folder)) continue;
+                namesToMatch.Add(folder);
+
+                // Extract base name and year from "Name 2025" or "Name (2025)"
+                string baseName = null;
+                string year = null;
+                var m = yearRegexParen.Match(folder);
+                if (m.Success)
+                {
+                    baseName = m.Groups[1].Value.Trim();
+                    year = m.Groups[2].Value;
+                }
+                else
+                {
+                    m = yearRegexBare.Match(folder);
+                    if (m.Success)
+                    {
+                        baseName = m.Groups[1].Value.Trim();
+                        year = m.Groups[2].Value;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(baseName) && !string.IsNullOrEmpty(year))
+                {
+                    namesToMatch.Add(baseName);                  // "Show Name"
+                    namesToMatch.Add($"{baseName} {year}");      // "Show Name 2025"
+                    namesToMatch.Add($"{baseName} ({year})");    // "Show Name (2025)"
+                }
+            }
+
+            if (aliases != null)
+            {
+                foreach (var a in aliases)
+                    if (!string.IsNullOrEmpty(a.AliasName))
+                        namesToMatch.Add(a.AliasName);
+            }
+
+            // Collect all root paths to scan
+            var rootPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (Directory.Exists(root))
+                rootPaths.Add(root);
+
+            // Also scan TV directories that have DaysToScan > 0
+            foreach (var tvDir in _db.TVDirectories.Where(d => d.DaysToScan > 0))
+            {
+                if (!string.IsNullOrEmpty(tvDir.Name) && Directory.Exists(tvDir.Name))
+                    rootPaths.Add(tvDir.Name);
+            }
+
+            var results = new List<ExistingFolderMatch>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var scanRoot in rootPaths)
+            {
+                foreach (var dir in Directory.GetDirectories(scanRoot))
+                {
+                    var folderName = Path.GetFileName(dir);
+                    if (folderName == null || !namesToMatch.Contains(folderName))
+                        continue;
+
+                    // Avoid duplicates if the same folder is reachable from multiple roots
+                    if (!seen.Add(dir))
+                        continue;
+
+                    var match = new ExistingFolderMatch
+                    {
+                        FolderName = folderName,
+                        FullPath = dir,
+                        FolderDate = Directory.GetLastWriteTime(dir)
+                    };
+
+                    // Scan files for earliest/latest episode
+                    try
+                    {
+                        var files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
+                        long? minSeason = null, minEp = null, maxSeason = null, maxEp = null;
+                        foreach (var file in files)
+                        {
+                            var parsedList = EpisodeNameParser.Parse(Path.GetFileName(file));
+                            if (parsedList == null) continue;
+                            foreach (var (s, e) in parsedList)
+                            {
+                                if (minSeason == null || s < minSeason || (s == minSeason && e < minEp))
+                                {
+                                    minSeason = s;
+                                    minEp = e;
+                                }
+                                if (maxSeason == null || s > maxSeason || (s == maxSeason && e > maxEp))
+                                {
+                                    maxSeason = s;
+                                    maxEp = e;
+                                }
+                            }
+                        }
+                        if (minSeason != null)
+                            match.EarliestEpisode = $"S{minSeason:D2}E{minEp:D2}";
+                        if (maxSeason != null)
+                            match.LatestEpisode = $"S{maxSeason:D2}E{maxEp:D2}";
+                    }
+                    catch { }
+
+                    results.Add(match);
+                }
+            }
+
+            return results.OrderBy(r => r.FolderName).ToList();
         }
 
         // ── Show folder aliases ──

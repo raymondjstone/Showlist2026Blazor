@@ -115,6 +115,9 @@ namespace Showlist2026.Services
         // NZB RSS feed crawling - uses RSS API keys, skips sites without RSS key configured
         Task<NzbSiteCrawlSummary> CrawlNzbRssFeedsForShow(long showId);
 
+        // Existing folder detection for undecided shows
+        List<ExistingFolderMatch> FindExistingFolders(Show show, List<ShowFolderAlias> aliases);
+
         // Show folder aliases
         List<ShowFolderAlias> GetFolderAliases(long showId);
         Task AddFolderAlias(long showId, string aliasName);

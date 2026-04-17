@@ -75,9 +75,9 @@ else
             .GroupBy(e =>
             {
                 int year = ((DateTimeOffset)e.ep.AiringTime).Year;
-                return year < 2000 ? "19xx" : year.ToString();
+                return year < 1970 ? "1960s" : year.ToString();
             })
-            .OrderBy(g => g.Key == "19xx" ? "0000" : g.Key);
+            .OrderBy(g => g.Key == "1960s" ? "0000" : g.Key);
 
         foreach (var g in grouped)
         {

@@ -1177,7 +1177,7 @@ namespace Showlist2026.Services
                         // If no show then no point in parsing any more
                         if (show != null)
                         {
-                            var parsed = EpisodeNameParser.Parse(fileinfo.Name);
+                            var parsed = EpisodeNameParser.ParseFirst(fileinfo.Name);
                             if (parsed == null)
                             {
                                 _logger.LogWarning("ShowDownloadedJob: Failed to parse episode from '{FileName}' for show '{ShowName}'", fileinfo.Name, show.name);
@@ -1345,7 +1345,7 @@ namespace Showlist2026.Services
 
                         if (show != null)
                         {
-                            var parsed = EpisodeNameParser.Parse(fileinfo.Name);
+                            var parsed = EpisodeNameParser.ParseFirst(fileinfo.Name);
                             if (parsed != null)
                             {
                                 episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == parsed.Value.episode
