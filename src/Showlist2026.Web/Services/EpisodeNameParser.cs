@@ -4,16 +4,16 @@ namespace Showlist2026.Services;
 
 public static class EpisodeNameParser
 {
-    // S01E02, S01E02E03, S01E02E03E04, etc.
-    private static readonly Regex SeMultiRegex = new(@"[Ss](?<season>\d{1,4})[Ee](?<episode>\d{1,4})(?:[Ee](?<extra>\d{1,4}))*");
+    // S01E02, S01E02E03, S01E02E03E04, SE01E02 (SHERLOCK-style), etc.
+    private static readonly Regex SeMultiRegex = new(@"[Ss][Ee]?(?<season>\d{1,4})[Ee](?<episode>\d{1,4})(?:[Ee](?<extra>\d{1,4}))*");
     // S01E01-E10 range
-    private static readonly Regex SeRangeRegex = new(@"[Ss](?<season>\d{1,4})[Ee](?<epStart>\d{1,4})\s*-\s*[Ee](?<epEnd>\d{1,4})");
+    private static readonly Regex SeRangeRegex = new(@"[Ss][Ee]?(?<season>\d{1,4})[Ee](?<epStart>\d{1,4})\s*-\s*[Ee](?<epEnd>\d{1,4})");
     // 01x02
     private static readonly Regex XRegex = new(@"(?<season>\d{1,4})[xX](?<episode>\d{1,4})");
     // Bare format: 102 = S1E02, 1202 = S12E02, delimited by . _ - or space
     private static readonly Regex BareRegex = new(@"(?<=[\.\-_ ])(?<season>\d{1,2})(?<episode>\d{2})(?=[\.\-_ ])");
-    // No-season patterns: E02, E2 (no preceding S##)
-    private static readonly Regex BareEpisodeRegex = new(@"(?<![Ss]\d{1,4})[Ee](?<episode>\d{1,4})");
+    // No-season patterns: E02, E2 (no preceding S## or SE##)
+    private static readonly Regex BareEpisodeRegex = new(@"(?<![Ss][Ee]?\d{1,4})[Ee](?<episode>\d{1,4})");
     // Part 2, Part 02
     private static readonly Regex PartRegex = new(@"(?:^|[\.\-_ ])Part[\s\.\-_]*(?<episode>\d{1,4})(?:$|[\.\-_ ])", RegexOptions.IgnoreCase);
 
