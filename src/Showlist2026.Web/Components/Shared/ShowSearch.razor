@@ -1,12 +1,14 @@
 @rendermode InteractiveServer
 @inject IShowListAppService AppService
 @inject NavigationManager Nav
+@implements IDisposable
 
 <div class="position-relative">
     <input type="text" class="form-control form-control-sm bg-secondary text-white border-secondary"
            placeholder="Search shows..."
            @bind="searchText" @bind:event="oninput" @bind:after="OnSearchChanged"
            @onfocusin="() => showDropdown = true"
+           @onfocusout="OnFocusOut"
            @onkeydown="HandleKeyDown" />
     @if (showDropdown && results != null && results.Count > 0)
     {
@@ -36,6 +38,7 @@
 
     protected override void OnInitialized()
     {
+        Nav.LocationChanged += OnLocationChanged;
         debounceTimer = new System.Timers.Timer(300);
         debounceTimer.AutoReset = false;
         debounceTimer.Elapsed += async (s, e) =>
@@ -54,6 +57,20 @@
                 StateHasChanged();
             });
         };
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        searchText = "";
+        results = null;
+        showDropdown = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnFocusOut()
+    {
+        await Task.Delay(200);
+        showDropdown = false;
     }
 
     private void OnSearchChanged()
@@ -94,6 +111,7 @@
 
     public void Dispose()
     {
+        Nav.LocationChanged -= OnLocationChanged;
         debounceTimer?.Dispose();
     }
 }

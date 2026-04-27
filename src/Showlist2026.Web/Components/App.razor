@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["Showlist2026.Web.styles.css"]" />
     <ImportMap />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="@(new InteractiveServerRenderMode(prerender: false))" />
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#0d6efd" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -49,7 +49,7 @@
 
 <body>
     <div id="global-loading-bar"></div>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="@(new InteractiveServerRenderMode(prerender: false))" />
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="_framework/blazor.web.js"></script>
     <script>
