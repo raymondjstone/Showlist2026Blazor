@@ -122,5 +122,15 @@ namespace Showlist2026.Services
         List<ShowFolderAlias> GetFolderAliases(long showId);
         Task AddFolderAlias(long showId, string aliasName);
         Task RemoveFolderAlias(int aliasId);
+
+        // Friends management
+        List<Friend> GetFriends();
+        Task<Friend> AddFriend(string name, string email, string folderPath);
+        Task UpdateFriend(int id, string name, string email, string folderPath);
+        Task DeleteFriend(int id);
+        Task AddFriendShow(int friendId, int showId);
+        Task RemoveFriendShow(int friendShowId);
+        List<Show> GetWatchedShows();
+        List<FriendCopy> GetRecentCopiesForFriend(int friendId, int count = 10);
     }
 }

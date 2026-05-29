@@ -3473,6 +3473,94 @@ namespace Showlist2026.Services
                 await _db.SaveChangesAsync();
             }
         }
+
+        // Friends management
+
+        public List<Friend> GetFriends()
+        {
+            return _db.Friends
+                .Include(f => f.InterestedShows)
+                    .ThenInclude(fs => fs.Show)
+                .OrderBy(f => f.Name)
+                .ToList();
+        }
+
+        public async Task<Friend> AddFriend(string name, string email, string folderPath)
+        {
+            var friend = new Friend
+            {
+                Name = name.Trim(),
+                Email = email.Trim(),
+                FolderPath = folderPath.Trim()
+            };
+            _db.Friends.Add(friend);
+            await _db.SaveChangesAsync();
+            return friend;
+        }
+
+        public async Task UpdateFriend(int id, string name, string email, string folderPath)
+        {
+            var friend = _db.Friends.Find(id);
+            if (friend != null)
+            {
+                friend.Name = name.Trim();
+                friend.Email = email.Trim();
+                friend.FolderPath = folderPath.Trim();
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task DeleteFriend(int id)
+        {
+            var friend = _db.Friends
+                .Include(f => f.InterestedShows)
+                .FirstOrDefault(f => f.Id == id);
+            if (friend != null)
+            {
+                _db.FriendShows.RemoveRange(friend.InterestedShows);
+                var copies = _db.FriendCopies.Where(c => c.FriendId == id);
+                _db.FriendCopies.RemoveRange(copies);
+                _db.Friends.Remove(friend);
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task AddFriendShow(int friendId, int showId)
+        {
+            bool exists = _db.FriendShows.Any(fs => fs.FriendId == friendId && fs.ShowId == showId);
+            if (!exists)
+            {
+                _db.FriendShows.Add(new FriendShow { FriendId = friendId, ShowId = showId });
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task RemoveFriendShow(int friendShowId)
+        {
+            var fs = _db.FriendShows.Find(friendShowId);
+            if (fs != null)
+            {
+                _db.FriendShows.Remove(fs);
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public List<Show> GetWatchedShows()
+        {
+            return _db.Shows
+                .Where(s => s.Episodes.Any(e => e.Watched))
+                .OrderBy(s => s.name)
+                .ToList();
+        }
+
+        public List<FriendCopy> GetRecentCopiesForFriend(int friendId, int count = 10)
+        {
+            return _db.FriendCopies
+                .Where(c => c.FriendId == friendId)
+                .OrderByDescending(c => c.CopiedAt)
+                .Take(count)
+                .ToList();
+        }
     }
 }
 

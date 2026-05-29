@@ -1051,6 +1051,88 @@ namespace Showlist2026.Services
             return true;
         }
 
+        private async Task CopyFilesToFriends(List<FileInfo> filesToScan)
+        {
+            var friends = _db.Friends
+                .Include(f => f.InterestedShows)
+                    .ThenInclude(fs => fs.Show)
+                .Where(f => !string.IsNullOrEmpty(f.FolderPath))
+                .ToList();
+
+            if (friends.Count == 0) return;
+
+            var userShows = _db.Shows.Where(s => s.Wanted == true).ToList();
+
+            foreach (var friend in friends)
+            {
+                var interestedShowIds = friend.InterestedShows.Select(fs => fs.ShowId).ToHashSet();
+                if (interestedShowIds.Count == 0) continue;
+
+                var alreadyCopied = _db.FriendCopies
+                    .Where(c => c.FriendId == friend.Id)
+                    .Select(c => c.FileName)
+                    .ToHashSet();
+
+                foreach (var fileinfo in filesToScan)
+                {
+                    if (alreadyCopied.Contains(fileinfo.Name)) continue;
+
+                    var dirsplit = fileinfo.DirectoryName?.ToLower().Split(Path.DirectorySeparatorChar);
+                    if (dirsplit == null || dirsplit.Length < 2) continue;
+                    if (!dirsplit.Last().StartsWith("season ")) continue;
+
+                    var showDir = dirsplit[dirsplit.Length - 2];
+                    var seasonDir = dirsplit.Last();
+
+                    var matchedShow = userShows.FirstOrDefault(u =>
+                        (!string.IsNullOrEmpty(u.FolderName) && u.FolderName.ToLower().Trim() == showDir) ||
+                        (!string.IsNullOrEmpty(u.name) && u.name.ToLower() == showDir) ||
+                        u.DefaultFolderName.ToLower().Trim() == showDir);
+
+                    if (matchedShow == null) continue;
+                    if (!interestedShowIds.Contains(matchedShow.Id)) continue;
+
+                    try
+                    {
+                        var showFolderName = matchedShow.FolderName ?? matchedShow.DefaultFolderName;
+                        // Capitalise season folder properly e.g. "season 3" -> "Season 3"
+                        var seasonFolderName = System.Globalization.CultureInfo.CurrentCulture.TextInfo
+                            .ToTitleCase(seasonDir);
+                        var destDir = Path.Combine(friend.FolderPath!, showFolderName, seasonFolderName);
+
+                        // Ensure the full destination path exists (root + show + season)
+                        if (!Directory.Exists(friend.FolderPath))
+                        {
+                            _logger.LogInformation("Creating friend root folder '{FolderPath}' for '{FriendName}'",
+                                friend.FolderPath, friend.Name);
+                            Directory.CreateDirectory(friend.FolderPath!);
+                        }
+                        Directory.CreateDirectory(destDir);
+
+                        var destFile = Path.Combine(destDir, fileinfo.Name);
+                        if (!File.Exists(destFile))
+                        {
+                            File.Copy(fileinfo.FullName, destFile);
+                            _logger.LogInformation("Copied '{FileName}' to friend '{FriendName}' at '{Dest}'",
+                                fileinfo.Name, friend.Name, destFile);
+                        }
+                        _db.FriendCopies.Add(new FriendCopy
+                        {
+                            FriendId = friend.Id,
+                            FileName = fileinfo.Name,
+                            CopiedAt = DateTime.UtcNow
+                        });
+                        alreadyCopied.Add(fileinfo.Name);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to copy '{FileName}' to friend '{FriendName}'",
+                            fileinfo.Name, friend.Name);
+                    }
+                }
+            }
+        }
+
         private async Task<List<FileInfo>> Dirlist(string dirName, int daysOldToAllow, string filter = "*.*", int minSizeAllowed = 50000)
         {
             List<FileInfo> filesList = new List<FileInfo>();
@@ -1258,6 +1340,8 @@ namespace Showlist2026.Services
                     _db.Add(tfolder);
                 }
             }
+
+            await CopyFilesToFriends(filesToScan);
 
             await _db.SaveChangesAsync();
 

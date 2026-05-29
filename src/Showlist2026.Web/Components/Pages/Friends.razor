@@ -1,0 +1,299 @@
+@page "/friends"
+@rendermode InteractiveServer
+@inject IShowListAppService AppService
+
+<PageTitle>Friends</PageTitle>
+
+@if (friends == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <h4>Friends</h4>
+        <p class="text-muted small">
+            Manage friends and the shows they are interested in. New TV files will be automatically copied
+            to each friend's folder (show/season structure) the next time the download job runs.
+        </p>
+
+        @if (!string.IsNullOrEmpty(statusMessage))
+        {
+            <div class="alert @(isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+                @statusMessage
+                <button type="button" class="btn-close" @onclick="() => statusMessage = null"></button>
+            </div>
+        }
+
+        @foreach (var friend in friends)
+        {
+            <div class="card mb-3">
+                <div class="card-body">
+                    @if (editingId == friend.Id)
+                    {
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small">Name</label>
+                                <input class="form-control form-control-sm" @bind="editName" placeholder="Name" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Email</label>
+                                <input class="form-control form-control-sm" @bind="editEmail" placeholder="Email" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Folder Path</label>
+                                <input class="form-control form-control-sm" @bind="editFolderPath" placeholder="e.g. \\server\friends\alice" />
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-success btn-sm" @onclick="SaveEdit">Save</button>
+                                <button class="btn btn-secondary btn-sm ms-1" @onclick="CancelEdit">Cancel</button>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row align-items-center">
+                            <div class="col-md-3">
+                                <strong>@friend.Name</strong>
+                            </div>
+                            <div class="col-md-3 text-muted small">
+                                @friend.Email
+                            </div>
+                            <div class="col-md-4 text-muted small font-monospace">
+                                @friend.FolderPath
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-outline-primary btn-sm" @onclick="() => StartEdit(friend)">Edit</button>
+                                <button class="btn btn-danger btn-sm ms-1" @onclick="() => DeleteFriend(friend.Id)">Delete</button>
+                            </div>
+                        </div>
+                    }
+
+                    <hr class="my-2" />
+
+                    <div class="row g-2 align-items-center mt-1">
+                        <div class="col-auto">
+                            <small class="text-muted">Interested shows:</small>
+                        </div>
+                        @foreach (var fs in friend.InterestedShows)
+                        {
+                            <div class="col-auto">
+                                <span class="badge bg-secondary">
+                                    @fs.Show?.name
+                                    <span class="ms-1" style="cursor:pointer" @onclick="() => RemoveFriendShow(fs.Id)">&#x2715;</span>
+                                </span>
+                            </div>
+                        }
+                        <div class="col-auto">
+                            <input class="form-control form-control-sm" style="width:180px"
+                                   placeholder="Search shows..."
+                                   value="@GetShowSearch(friend.Id)"
+                                   @oninput="(e) => SetShowSearch(friend.Id, e.Value?.ToString() ?? string.Empty)" />
+                        </div>
+                        <div class="col-auto">
+                            <select class="form-select form-select-sm" style="width:220px"
+                                    @bind="addShowSelectId[friend.Id]">
+                                <option value="0">-- select --</option>
+                                @foreach (var s in FilteredShows(friend))
+                                {
+                                    <option value="@s.Id">@s.name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-sm btn-outline-success" @onclick="() => AddFriendShow(friend.Id)">Add</button>
+                        </div>
+                    </div>
+
+                    @if (recentCopies.TryGetValue(friend.Id, out var copies) && copies.Count > 0)
+                    {
+                        <hr class="my-2" />
+                        <div class="mt-1">
+                            <small class="text-muted">Last @copies.Count copied:</small>
+                            <table class="table table-sm table-borderless mb-0 mt-1">
+                                <tbody>
+                                    @foreach (var copy in copies)
+                                    {
+                                        <tr>
+                                            <td class="py-0 small font-monospace">@copy.FileName</td>
+                                            <td class="py-0 small text-muted text-nowrap">@copy.CopiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="card mb-3 border-primary">
+            <div class="card-header text-primary small">Add New Friend</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small">Name</label>
+                        <input class="form-control form-control-sm" @bind="newName" placeholder="Name" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Email</label>
+                        <input class="form-control form-control-sm" @bind="newEmail" placeholder="Email" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Folder Path</label>
+                        <input class="form-control form-control-sm" @bind="newFolderPath" placeholder="e.g. \\server\friends\bob" />
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-primary btn-sm" @onclick="AddFriend">Add</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Showlist2026.Entities.Friend>? friends;
+    private List<Showlist2026.Entities.Show> watchedShows = new();
+    private Dictionary<int, int> addShowSelectId = new();
+    private Dictionary<int, List<Showlist2026.Entities.FriendCopy>> recentCopies = new();
+    private Dictionary<int, string> showSearchText = new();
+
+    private string GetShowSearch(int friendId) =>
+        showSearchText.TryGetValue(friendId, out var v) ? v : string.Empty;
+
+    private void SetShowSearch(int friendId, string value)
+    {
+        showSearchText[friendId] = value;
+        // Reset selection when search changes
+        addShowSelectId[friendId] = 0;
+    }
+
+    private IEnumerable<Showlist2026.Entities.Show> FilteredShows(Showlist2026.Entities.Friend friend)
+    {
+        var search = GetShowSearch(friend.Id);
+        var available = watchedShows.Where(ws => !friend.InterestedShows.Any(fs => fs.ShowId == ws.Id));
+        if (string.IsNullOrWhiteSpace(search))
+            return available;
+        return available.Where(s => s.name != null && s.name.Contains(search, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string? statusMessage;
+    private bool isError;
+
+    private int editingId = 0;
+    private string editName = "", editEmail = "", editFolderPath = "";
+
+    private string newName = "", newEmail = "", newFolderPath = "";
+
+    protected override void OnInitialized()
+    {
+        LoadData();
+    }
+
+    private void LoadData()
+    {
+        friends = AppService.GetFriends();
+        watchedShows = AppService.GetWatchedShows();
+        addShowSelectId = friends.ToDictionary(f => f.Id, _ => 0);
+        recentCopies = friends.ToDictionary(f => f.Id, f => AppService.GetRecentCopiesForFriend(f.Id));
+        showSearchText = friends.ToDictionary(f => f.Id, _ => string.Empty);
+    }
+
+    private void StartEdit(Showlist2026.Entities.Friend friend)
+    {
+        editingId = friend.Id;
+        editName = friend.Name ?? "";
+        editEmail = friend.Email ?? "";
+        editFolderPath = friend.FolderPath ?? "";
+    }
+
+    private void CancelEdit()
+    {
+        editingId = 0;
+    }
+
+    private async Task SaveEdit()
+    {
+        try
+        {
+            await AppService.UpdateFriend(editingId, editName, editEmail, editFolderPath);
+            editingId = 0;
+            LoadData();
+            statusMessage = "Friend updated.";
+            isError = false;
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private async Task AddFriend()
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return;
+        try
+        {
+            await AppService.AddFriend(newName, newEmail, newFolderPath);
+            newName = newEmail = newFolderPath = "";
+            LoadData();
+            statusMessage = "Friend added.";
+            isError = false;
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private async Task DeleteFriend(int id)
+    {
+        try
+        {
+            await AppService.DeleteFriend(id);
+            LoadData();
+            statusMessage = "Friend deleted.";
+            isError = false;
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private async Task AddFriendShow(int friendId)
+    {
+        if (!addShowSelectId.TryGetValue(friendId, out int showId) || showId == 0) return;
+        try
+        {
+            await AppService.AddFriendShow(friendId, showId);
+            LoadData();
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private async Task RemoveFriendShow(int friendShowId)
+    {
+        try
+        {
+            await AppService.RemoveFriendShow(friendShowId);
+            LoadData();
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error: {ex.Message}";
+            isError = true;
+        }
+    }
+}
