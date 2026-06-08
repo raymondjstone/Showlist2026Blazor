@@ -3571,6 +3571,48 @@ namespace Showlist2026.Services
                 .Take(count)
                 .ToList();
         }
+
+        // Show predecessor/successor links
+
+        public List<ShowLink> GetShowLinks(long showId)
+        {
+            int id = (int)showId;
+            return _db.ShowLinks
+                .Include(sl => sl.PredecessorShow)
+                .Include(sl => sl.SuccessorShow)
+                .Where(sl => sl.PredecessorShowId == id || sl.SuccessorShowId == id)
+                .ToList();
+        }
+
+        public async Task AddShowLink(long predecessorShowId, long successorShowId)
+        {
+            int predId = (int)predecessorShowId;
+            int succId = (int)successorShowId;
+
+            bool exists = _db.ShowLinks.Any(sl =>
+                (sl.PredecessorShowId == predId && sl.SuccessorShowId == succId) ||
+                (sl.PredecessorShowId == succId && sl.SuccessorShowId == predId));
+
+            if (!exists)
+            {
+                _db.ShowLinks.Add(new ShowLink
+                {
+                    PredecessorShowId = predId,
+                    SuccessorShowId = succId
+                });
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task RemoveShowLink(int showLinkId)
+        {
+            var link = _db.ShowLinks.Find(showLinkId);
+            if (link != null)
+            {
+                _db.ShowLinks.Remove(link);
+                await _db.SaveChangesAsync();
+            }
+        }
     }
 }
 

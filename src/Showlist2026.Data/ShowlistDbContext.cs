@@ -25,6 +25,7 @@ namespace Showlist2026.Data
         public DbSet<Friend> Friends { get; set; }
         public DbSet<FriendShow> FriendShows { get; set; }
         public DbSet<FriendCopy> FriendCopies { get; set; }
+        public DbSet<ShowLink> ShowLinks { get; set; }
 
         public ShowlistDbContext(DbContextOptions<ShowlistDbContext> options)
             : base(options)
@@ -38,6 +39,19 @@ namespace Showlist2026.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // ShowLink has two FKs to Show — disable cascade delete to avoid multi-cascade-path error
+            modelBuilder.Entity<ShowLink>()
+                .HasOne(sl => sl.PredecessorShow)
+                .WithMany()
+                .HasForeignKey(sl => sl.PredecessorShowId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ShowLink>()
+                .HasOne(sl => sl.SuccessorShow)
+                .WithMany()
+                .HasForeignKey(sl => sl.SuccessorShowId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

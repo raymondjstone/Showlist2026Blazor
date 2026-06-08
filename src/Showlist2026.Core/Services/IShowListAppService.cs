@@ -132,5 +132,10 @@ namespace Showlist2026.Services
         Task RemoveFriendShow(int friendShowId);
         List<Show> GetWatchedShows();
         List<FriendCopy> GetRecentCopiesForFriend(int friendId, int count = 10);
+
+        // Show predecessor/successor links
+        List<ShowLink> GetShowLinks(long showId);
+        Task AddShowLink(long predecessorShowId, long successorShowId);
+        Task RemoveShowLink(int showLinkId);
     }
 }
