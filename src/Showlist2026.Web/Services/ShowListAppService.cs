@@ -3448,18 +3448,28 @@ namespace Showlist2026.Services
                 .ToList();
         }
 
-        public async Task AddFolderAlias(long showId, string aliasName)
+        public async Task AddFolderAlias(long showId, string aliasName, int seasonOffset = 0)
         {
             if (string.IsNullOrWhiteSpace(aliasName)) return;
 
-            var exists = _db.ShowFolderAliases
-                .Any(a => a.ShowId == (int)showId && a.AliasName == aliasName.Trim());
-            if (exists) return;
+            var existing = _db.ShowFolderAliases
+                .FirstOrDefault(a => a.ShowId == (int)showId && a.AliasName == aliasName.Trim());
+            if (existing != null)
+            {
+                // Allow updating the offset on an existing alias.
+                if (existing.SeasonOffset != seasonOffset)
+                {
+                    existing.SeasonOffset = seasonOffset;
+                    await _db.SaveChangesAsync();
+                }
+                return;
+            }
 
             _db.ShowFolderAliases.Add(new ShowFolderAlias
             {
                 ShowId = (int)showId,
-                AliasName = aliasName.Trim()
+                AliasName = aliasName.Trim(),
+                SeasonOffset = seasonOffset
             });
             await _db.SaveChangesAsync();
         }

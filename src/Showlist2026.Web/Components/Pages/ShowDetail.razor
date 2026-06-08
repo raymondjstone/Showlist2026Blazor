@@ -1,5 +1,6 @@
 @page "/showlist/show/{ShowId:long}"
 @rendermode InteractiveServer
+@implements IDisposable
 @inject IShowListAppService AppService
 @using Showlist2026.NZBPlanetApiJSON
 @using Showlist2026.Models
@@ -41,8 +42,13 @@ else
                         Aliases:
                         @foreach (var alias in folderAliases)
                         {
-                            <span class="badge bg-secondary me-1">
+                            <span class="badge bg-secondary me-1"
+                                  title="@(alias.SeasonOffset != 0 ? $"Files named \"{alias.AliasName}\" S{alias.SeasonOffset + 1} map to this show's S01 (offset {alias.SeasonOffset})" : $"Plain folder alias \"{alias.AliasName}\" (no season offset)")">
                                 @alias.AliasName
+                                @if (alias.SeasonOffset != 0)
+                                {
+                                    <span class="badge bg-info text-dark ms-1">S@(alias.SeasonOffset + 1)→S1</span>
+                                }
                                 <i class="fas fa-times ms-1" role="button" title="Remove alias"
                                    @onclick="() => RemoveAlias(alias.Id)"></i>
                             </span>
@@ -67,12 +73,51 @@ else
                 </div>
                 @if (showAliasInput)
                 {
-                    <div class="mt-2 d-flex align-items-center gap-2">
-                        <input type="text" class="form-control form-control-sm" style="max-width:300px;"
-                               @bind="newAliasName" placeholder="Alias folder name" />
+                    <div class="mt-2 d-flex align-items-start gap-2">
+                        <div class="position-relative" style="max-width:300px; flex:0 0 300px;">
+                            <input type="text" class="form-control form-control-sm"
+                                   @bind="newAliasName" @bind:event="oninput" @bind:after="OnAliasSearchChanged"
+                                   @onfocusin="() => aliasShowDropdown = true"
+                                   @onfocusout="OnAliasFocusOut"
+                                   placeholder="Old show / folder name in files" autocomplete="off" />
+                            @if (aliasShowDropdown && aliasSearchResults != null && aliasSearchResults.Count > 0)
+                            {
+                                <div class="position-absolute w-100 bg-white border border-secondary rounded-bottom shadow"
+                                     style="z-index: 1050; max-height: 240px; overflow-y: auto;">
+                                    @foreach (var s in aliasSearchResults)
+                                    {
+                                        <div class="px-2 py-1 border-bottom" style="cursor: pointer; font-size: 0.85rem;"
+                                             @onclick="() => SelectAliasShow(s)">
+                                            <div>@s.select2ResultName</div>
+                                            <small class="text-muted">folder: @(string.IsNullOrEmpty(s.FolderName) ? s.DefaultFolderName : s.FolderName)</small>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <input type="number" min="0" class="form-control form-control-sm" style="max-width:140px;"
+                               @bind="newAliasOffset" @bind:event="oninput"
+                               title="Number of seasons that aired under the old name before THIS show started. File season minus this offset = this show's season."
+                               placeholder="Season offset" />
                         <button class="btn btn-sm btn-success" @onclick="AddAlias">Add</button>
                         <button class="btn btn-sm btn-outline-secondary" @onclick="() => showAliasInput = false">Cancel</button>
                     </div>
+                    @if (newAliasOffset > 0)
+                    {
+                        <div class="mt-1">
+                            <span class="badge bg-info text-dark">
+                                @(string.IsNullOrWhiteSpace(newAliasName) ? "Old show" : newAliasName)
+                                S@(newAliasOffset + 1) → this show's S01
+                            </span>
+                            <span class="text-muted ms-1">(S@(newAliasOffset + 2)→S02, and so on)</span>
+                        </div>
+                    }
+                    <small class="text-muted d-block mt-1">
+                        Add this on the <strong>continuation</strong> show. Alias = the old show's name as it appears in files;
+                        offset = the old show's season count. E.g. old show ran 2 seasons and its files continue as
+                        <code>S03</code> → enter offset <code>2</code> so <code>S03</code> maps to this show's <code>S01</code>.
+                        Leave <code>0</code> for a plain folder alias (no renumbering).
+                    </small>
                 }
                 <br />
 
@@ -537,6 +582,53 @@ else
     private List<ExistingFolderMatch>? existingFolders;
     private bool showAliasInput;
     private string newAliasName = "";
+    private int newAliasOffset = 0;
+    private List<Show>? aliasSearchResults;
+    private bool aliasShowDropdown;
+    private System.Timers.Timer? aliasDebounceTimer;
+
+    protected override void OnInitialized()
+    {
+        aliasDebounceTimer = new System.Timers.Timer(300) { AutoReset = false };
+        aliasDebounceTimer.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(() =>
+            {
+                aliasSearchResults = (newAliasName?.Trim().Length ?? 0) >= 2
+                    ? AppService.showlist(newAliasName.Trim())
+                    : null;
+                StateHasChanged();
+            });
+        };
+    }
+
+    private void OnAliasSearchChanged()
+    {
+        aliasShowDropdown = true;
+        aliasDebounceTimer?.Stop();
+        aliasDebounceTimer?.Start();
+    }
+
+    private async Task OnAliasFocusOut()
+    {
+        // Delay so an @onclick on a dropdown item registers before it closes.
+        await Task.Delay(200);
+        aliasShowDropdown = false;
+        StateHasChanged();
+    }
+
+    private void SelectAliasShow(Show s)
+    {
+        // Use the show's folder name, since that's how its files/folder are named on disk.
+        newAliasName = string.IsNullOrEmpty(s.FolderName) ? s.DefaultFolderName : s.FolderName;
+        aliasSearchResults = null;
+        aliasShowDropdown = false;
+    }
+
+    public void Dispose()
+    {
+        aliasDebounceTimer?.Dispose();
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -796,8 +888,11 @@ else
     {
         if (!string.IsNullOrWhiteSpace(newAliasName))
         {
-            await AppService.AddFolderAlias(show.Id, newAliasName);
+            await AppService.AddFolderAlias(show.Id, newAliasName, newAliasOffset);
             newAliasName = "";
+            newAliasOffset = 0;
+            aliasSearchResults = null;
+            aliasShowDropdown = false;
             showAliasInput = false;
             folderAliases = AppService.GetFolderAliases(show.Id);
         }

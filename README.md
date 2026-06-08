@@ -217,6 +217,7 @@ dotnet user-secrets set "Notifications:Email:Password" "your-app-password"
 - **Episode tracking** — mark episodes as watched, track watch history
 - **Filters** — filter by show, genre, network, web network, country, language, type
 - **Notifications** — get notified via Pushover, Discord, or Email when new episodes air or new seasons start
+- **Folder aliases & continuation links** — map alternate folder names to a show, and link continuation shows (a "new" TVMaze listing that's really a later season of an earlier show) with a **season offset**. Files that arrive under the old show's name with continued season numbering (e.g. `Foo/Season 3/...` where the new show's S01 = Foo's S03) are matched to the correct show's episodes in place. Managed per-show on the show detail page.
 
 ### Views
 - **Airing Now** — episodes airing around the current date for your selected shows

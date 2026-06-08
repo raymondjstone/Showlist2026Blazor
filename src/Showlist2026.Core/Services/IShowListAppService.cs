@@ -120,7 +120,7 @@ namespace Showlist2026.Services
 
         // Show folder aliases
         List<ShowFolderAlias> GetFolderAliases(long showId);
-        Task AddFolderAlias(long showId, string aliasName);
+        Task AddFolderAlias(long showId, string aliasName, int seasonOffset = 0);
         Task RemoveFolderAlias(int aliasId);
 
         // Friends management

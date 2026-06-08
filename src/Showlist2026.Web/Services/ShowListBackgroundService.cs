@@ -1161,11 +1161,66 @@ namespace Showlist2026.Services
         }
 
 
+        /// <summary>
+        /// Resolves which show and episode a scanned file belongs to, given its show folder name.
+        /// Handles continuation shows: a file under an old show's folder (e.g. "Foo/Season 3/...")
+        /// can belong to a different show via a <see cref="ShowFolderAlias"/> with a SeasonOffset
+        /// (showSeason = fileSeason - SeasonOffset). Direct (own-folder) matches win over
+        /// continuation matches.
+        /// </summary>
+        /// <returns>
+        /// matchedShow/matchedEpisode = the resolved owner (null episode when none found);
+        /// directShow = the show matched purely by folder name (for logging);
+        /// parsed = the parsed (season, episode) from the filename (null when unparseable).
+        /// </returns>
+        private (Show? matchedShow, Episode? matchedEpisode, Show? directShow, (long season, long episode)? parsed)
+            ResolveShowEpisode(string showdir, string fileName, List<Show> userShows, List<ShowFolderAlias> aliases)
+        {
+            var key = showdir.ToLower().Trim();
+
+            Show? directShow = userShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.FolderName) && u.FolderName.ToLower().Trim() == key);
+            if (directShow == null)
+                directShow = userShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.name) && u.name.ToLower() == key);
+            if (directShow == null)
+                directShow = userShows.FirstOrDefault(u => u.DefaultFolderName.ToLower().Trim() == key);
+
+            var parsed = EpisodeNameParser.ParseFirst(fileName);
+            if (parsed == null)
+                return (null, null, directShow, null);
+
+            var season = parsed.Value.season;
+            var ep = parsed.Value.episode;
+
+            // 1) Direct show at the parsed season wins.
+            if (directShow != null)
+            {
+                var directEp = _db.Episodes.FirstOrDefault(e => e.show.Id == directShow.Id && e.number == ep && e.season == season);
+                if (directEp != null)
+                    return (directShow, directEp, directShow, parsed);
+            }
+
+            // 2) Continuation candidates: aliases whose name matches this folder, with a season offset.
+            foreach (var alias in aliases.Where(a => a.Show != null
+                         && !string.IsNullOrEmpty(a.AliasName)
+                         && a.AliasName.ToLower().Trim() == key))
+            {
+                var effectiveSeason = season - alias.SeasonOffset;
+                if (effectiveSeason < 1) continue;
+                var contEp = _db.Episodes.FirstOrDefault(e => e.show.Id == alias.Show!.Id && e.number == ep && e.season == effectiveSeason);
+                if (contEp != null)
+                    return (alias.Show, contEp, directShow, parsed);
+            }
+
+            // Parsed fine, but no episode matched anywhere.
+            return (directShow, null, directShow, parsed);
+        }
+
         public async Task<bool> ShowDownloadedJob()
         {
             List<string> foundShowFolder = new List<string>(600000);
             List<TouchFile> foundShowFiles = new (600000);
             var UserShows = _db.Shows.Where(s => s.Wanted == true).ToList();
+            var FolderAliases = _db.ShowFolderAliases.Include(a => a.Show).ToList();
             var dirs = _db.TVDirectories
                 .Where(d => d.DaysToScan != 0)
                 .OrderByDescending(d =>d.MinFileSize)
@@ -1241,40 +1296,28 @@ namespace Showlist2026.Services
                     {
                         String showdir = dirsplit[dirsplit.Length - 2].ToLower();
                         String seasondir = dirsplit.Last().ToLower();
-                        show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.FolderName) && u.FolderName.ToLower().Trim() == showdir.ToLower().Trim());
-                        if (show == null)
-                        {
-                            show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.name) && u.name.ToLower() == showdir.ToLower());
-                        }
-                        if (show == null)
-                        {
-                            show = UserShows.FirstOrDefault(u => u.DefaultFolderName.ToLower().Trim() == showdir.ToLower().Trim());
-                        }
 
-                        if (show == null)
+                        var (matchedShow, matchedEpisode, directShow, parsed) =
+                            ResolveShowEpisode(showdir, fileinfo.Name, UserShows, FolderAliases);
+                        show = matchedShow;
+                        episode = matchedEpisode;
+
+                        if (directShow == null)
                         {
                             _logger.LogWarning("ShowDownloadedJob: No show match for folder '{ShowDir}' (file: {FileName})", showdir, fileinfo.Name);
                         }
+                        else if (parsed == null)
+                        {
+                            _logger.LogWarning("ShowDownloadedJob: Failed to parse episode from '{FileName}' for show '{ShowName}'", fileinfo.Name, directShow.name);
+                        }
+                        else if (episode == null)
+                        {
+                            _logger.LogWarning("ShowDownloadedJob: No episode found for {ShowName} S{Season}E{Episode} (file: {FileName})",
+                                directShow.name, parsed.Value.season, parsed.Value.episode, fileinfo.Name);
+                        }
 
-                        // If no show then no point in parsing any more
                         if (show != null)
                         {
-                            var parsed = EpisodeNameParser.ParseFirst(fileinfo.Name);
-                            if (parsed == null)
-                            {
-                                _logger.LogWarning("ShowDownloadedJob: Failed to parse episode from '{FileName}' for show '{ShowName}'", fileinfo.Name, show.name);
-                            }
-                            if (parsed != null)
-                            {
-                                episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == parsed.Value.episode
-                                && e.season == parsed.Value.season);
-                                if (episode == null)
-                                {
-                                    _logger.LogWarning("ShowDownloadedJob: No episode found for {ShowName} S{Season}E{Episode} (file: {FileName})",
-                                        show.name, parsed.Value.season, parsed.Value.episode, fileinfo.Name);
-                                }
-                            }
-
                             if (episode != null)
                             {
                                 if (tf.Episode is null)
@@ -1359,6 +1402,7 @@ namespace Showlist2026.Services
             List<string> foundShowFolder = new List<string>(600000);
             List<TouchFile> foundShowFiles = new(600000);
             var UserShows = _db.Shows.Where(s => s.Wanted == true).ToList();
+            var FolderAliases = _db.ShowFolderAliases.Include(a => a.Show).ToList();
 
             var filesToScan = await Dirlist(directory.Trim(), -1, "*.*", 0);
 
@@ -1417,25 +1461,14 @@ namespace Showlist2026.Services
                     {
                         String showdir = dirsplit[dirsplit.Length - 2].ToLower();
                         String seasondir = dirsplit.Last().ToLower();
-                        show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.FolderName) && u.FolderName.ToLower().Trim() == showdir.ToLower().Trim());
-                        if (show == null)
-                        {
-                            show = UserShows.FirstOrDefault(u => !string.IsNullOrEmpty(u.name) && u.name.ToLower() == showdir.ToLower());
-                        }
-                        if (show == null)
-                        {
-                            show = UserShows.FirstOrDefault(u => u.DefaultFolderName.ToLower().Trim() == showdir.ToLower().Trim());
-                        }
+
+                        var (matchedShow, matchedEpisode, _, _) =
+                            ResolveShowEpisode(showdir, fileinfo.Name, UserShows, FolderAliases);
+                        show = matchedShow;
+                        episode = matchedEpisode;
 
                         if (show != null)
                         {
-                            var parsed = EpisodeNameParser.ParseFirst(fileinfo.Name);
-                            if (parsed != null)
-                            {
-                                episode = _db.Episodes.FirstOrDefault(e => e.show.Id == show.Id && e.number == parsed.Value.episode
-                                && e.season == parsed.Value.season);
-                            }
-
                             if (episode != null)
                             {
                                 if (tf.Episode is null)
