@@ -26,7 +26,7 @@ public class WatchedRssController : Controller
             .Include(e => e.show)
             .Where(e => e.Watched && e.AirDateOffset2 != null)
             .OrderByDescending(e => e.AirDateOffset2)
-            .Take(100)
+            .Take(200)
             .ToListAsync();
 
         var items = episodes.Select(ep =>

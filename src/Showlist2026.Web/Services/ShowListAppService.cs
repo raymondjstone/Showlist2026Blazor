@@ -17,16 +17,16 @@ namespace Showlist2026.Services
 {
     public class ShowListAppService : IShowListAppService
     {
-        private readonly ShowlistDbContext _db;
+        private readonly IDbContextFactory<ShowlistDbContext> _dbFactory;
         private readonly ILogger<ShowListAppService> _logger;
         private readonly ShowlistOptions _options;
         private readonly INotificationService _notifications;
 
 
-        public ShowListAppService(ShowlistDbContext db, ILogger<ShowListAppService> logger,
+        public ShowListAppService(IDbContextFactory<ShowlistDbContext> dbFactory, ILogger<ShowListAppService> logger,
             IOptions<ShowlistOptions> options, INotificationService notifications)
         {
-            _db = db;
+            _dbFactory = dbFactory;
             _logger = logger;
             _options = options.Value;
             _notifications = notifications;
@@ -34,17 +34,20 @@ namespace Showlist2026.Services
 
         public List<Show> showlist(string srch)
         {
-            return _db.Shows.Where(s => s.name.Contains(srch)).OrderBy(a => a.name).ToList();
+            using var _db = _dbFactory.CreateDbContext();
+            return _db.Shows.Where(s => s.name.Contains(srch)).OrderBy(a => a.name).AsNoTracking().ToList();
         }
 
         public List<TVSite> TvSites()
         {
-            return _db.TVSites.OrderBy(a => a.Order).ToList();
+            using var _db = _dbFactory.CreateDbContext();
+            return _db.TVSites.OrderBy(a => a.Order).AsNoTracking().ToList();
         }
 
         public async Task TVSiteUpdate(int id, bool active, int order, string name, string urltemplate, 
             string apiKey = "", string apiBaseUrl = "", string rssApiKey = "", string rssBaseUrl = "")
         {
+            using var _db = _dbFactory.CreateDbContext();
             TVSite current = null;
             if (id > 0)
             {
@@ -86,6 +89,7 @@ namespace Showlist2026.Services
 
         public async Task TVSiteDelete(int id)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var site = _db.TVSites.Find(id);
             if (site != null)
             {
@@ -96,11 +100,13 @@ namespace Showlist2026.Services
 
         public List<TVDirectories> TvDirectories()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.TVDirectories.OrderBy(a => a.Name).ToList();
         }
 
         public async Task TVDirectoryUpdate(int id, string name, int daysToScan, string filter, int minFileSize, bool aliasable = false)
         {
+            using var _db = _dbFactory.CreateDbContext();
             TVDirectories current = null;
             if (id > 0)
             {
@@ -134,6 +140,7 @@ namespace Showlist2026.Services
 
         public async Task TVDirectoryDelete(int id)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var dir = _db.TVDirectories.Find(id);
             if (dir != null)
             {
@@ -144,43 +151,51 @@ namespace Showlist2026.Services
 
         public List<Country> CountryData()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.Countrys.ToList() ?? new List<Country>();
         }
 
         public List<Language> LanguageData()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.Languages.ToList() ?? new List<Language>();
         }
 
         public List<Type> TypeData()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.Types.ToList() ?? new List<Type>();
         }
 
         public List<GenreText> GenreData()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.GenreTexts.ToList() ?? new List<GenreText>();
         }
 
         public List<Network> NetworkData()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.Networks.Include(n => n.country).ToList() ?? new List<Network>();
         }
 
         public List<WebNetwork> WebNetworkData()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.WebNetworks.Include(n => n.country).ToList() ?? new List<WebNetwork>();
         }
 
         public List<Show> ShowData()
         {
-            return _db.Shows.Where(s => s.Wanted != null).OrderBy(s => s.name).ToList();
+            using var _db = _dbFactory.CreateDbContext();
+            return _db.Shows.Where(s => s.Wanted != null).OrderBy(s => s.name).AsNoTracking().ToList();
         }
 
 
 
         public Show ShowPageData(long id)
         {
+            using var _db = _dbFactory.CreateDbContext();
 
             try
             {
@@ -206,7 +221,7 @@ namespace Showlist2026.Services
                 var temp = _db.GenreTexts.ToList();
                 var tz = _db.Timezones.ToList();
 
-                PopulateSuggestedFolderNames(new List<Show> { show });
+                PopulateSuggestedFolderNames(_db, new List<Show> { show });
                 return show;
             }
             catch (Exception ex)
@@ -220,6 +235,7 @@ namespace Showlist2026.Services
 
         public List<EpFilter> AiringAroundNowForUser(int daysminus = -15, int daysplus = 15, bool firstshowOnly = false, bool includeIgnored = false, bool includeWatched = false)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
 
@@ -233,12 +249,7 @@ namespace Showlist2026.Services
             var showFilters = _db.Shows.Where(s => s.Wanted != null)
                 .Select(s => new { s.Id, Include = s.Wanted.Value })
                 .ToDictionary(s => s.Id, s => s.Include);
-            var networkFilterMap = _db.Networks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var webnetworkFilterMap = _db.WebNetworks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var genreFilterMap = _db.GenreTexts.Where(g => g.Wanted != null).ToDictionary(g => g.Id, g => g.Wanted.Value);
-            var languageFilterMap = _db.Languages.Where(l => l.Wanted != null).ToDictionary(l => l.Id, l => l.Wanted.Value);
-            var typeFilterMap = _db.Types.Where(t => t.Wanted != null).ToDictionary(t => t.Id, t => t.Wanted.Value);
-            var countryFilterMap = _db.Countrys.Where(c => c.Wanted != null).ToDictionary(c => c.Id, c => c.Wanted.Value);
+            var maps = LoadFilterMaps(_db);
             _logger.LogDebug($"PERF[AiringAroundNow] User filters loaded: {sw.ElapsedMilliseconds}ms");
 
             // Load all show FK IDs in ONE lightweight query for filter matching
@@ -262,12 +273,12 @@ namespace Showlist2026.Services
             _logger.LogDebug($"PERF[AiringAroundNow] Genre map loaded ({genreShowMap.Count} entries): {sw.ElapsedMilliseconds}ms");
 
             // Build the set of relevant show IDs in memory from user's positive selections
-            var selectedNetworkIds = networkFilterMap.Where(n => n.Value).Select(n => n.Key).ToHashSet();
-            var selectedWebNetworkIds = webnetworkFilterMap.Where(n => n.Value).Select(n => n.Key).ToHashSet();
-            var selectedTypeIds = typeFilterMap.Where(t => t.Value).Select(t => t.Key).ToHashSet();
-            var selectedLangIds = languageFilterMap.Where(l => l.Value).Select(l => l.Key).ToHashSet();
-            var selectedCountryIds = countryFilterMap.Where(c => c.Value).Select(c => c.Key).ToHashSet();
-            var selectedGenreTextIds = genreFilterMap.Where(g => g.Value).Select(g => g.Key).ToHashSet();
+            var selectedNetworkIds = maps.Network.Where(n => n.Value).Select(n => n.Key).ToHashSet();
+            var selectedWebNetworkIds = maps.WebNetwork.Where(n => n.Value).Select(n => n.Key).ToHashSet();
+            var selectedTypeIds = maps.Type.Where(t => t.Value).Select(t => t.Key).ToHashSet();
+            var selectedLangIds = maps.Language.Where(l => l.Value).Select(l => l.Key).ToHashSet();
+            var selectedCountryIds = maps.Country.Where(c => c.Value).Select(c => c.Key).ToHashSet();
+            var selectedGenreTextIds = maps.Genre.Where(g => g.Value).Select(g => g.Key).ToHashSet();
 
             var relevantShowIds = new HashSet<int>();
 
@@ -312,8 +323,12 @@ namespace Showlist2026.Services
                 .ToList();
             _logger.LogDebug($"PERF[AiringAroundNow] Selected show episodes loaded ({selectedEps.Count} eps): {sw.ElapsedMilliseconds}ms");
 
-            // Query 2: S01E01 "new show" discovery (limited to last 90 days for performance)
-            var recentMin = DateTimeOffset.UtcNow.AddDays(-90);
+            // Query 2: S01E01 "new show" discovery.
+            // Never look further back than the caller's own window (`min`), otherwise narrow
+            // ranges like TonightsEpisodes(0,0) would surface 90 days of premieres. Cap the
+            // look-back at 90 days for performance when the requested window is wider than that.
+            var ninetyDaysAgo = DateTimeOffset.UtcNow.AddDays(-90);
+            var recentMin = min > ninetyDaysAgo ? min : ninetyDaysAgo;
             var newShowEps = _db.Episodes
                 .Where(a => a.AirDateOffset2 >= recentMin && a.AirDateOffset2 <= max
                 && a.number == 1 && a.season == 1
@@ -384,8 +399,7 @@ namespace Showlist2026.Services
             List<EpFilter> EpFilters = new List<EpFilter>(eps.Count);
             foreach (var e in eps.Where(a => a.show != null))
             {
-                var ef = CreateEpFilter(e, showFilterMap, networkFilterMap, webnetworkFilterMap,
-                        genreFilterMap, languageFilterMap, typeFilterMap, countryFilterMap, tvsites);
+                var ef = CreateEpFilter(e, showFilterMap, maps, tvsites);
                 ef.activelywatched = e.Watched;
                 EpFilters.Add(ef);
             }
@@ -413,7 +427,7 @@ namespace Showlist2026.Services
 
 
 
-        private void PopulateSuggestedFolderNames(List<Show> shows)
+        private void PopulateSuggestedFolderNames(ShowlistDbContext _db, List<Show> shows)
         {
             // Find show names that exist more than once in the DB
             var names = shows.Where(s => !string.IsNullOrEmpty(s.name)).Select(s => s.name).Distinct().ToList();
@@ -433,15 +447,31 @@ namespace Showlist2026.Services
             }
         }
 
+        private sealed class FilterMaps
+        {
+            public required Dictionary<int, bool> Network { get; init; }
+            public required Dictionary<int, bool> WebNetwork { get; init; }
+            public required Dictionary<int, bool> Genre { get; init; }
+            public required Dictionary<int, bool> Language { get; init; }
+            public required Dictionary<int, bool> Type { get; init; }
+            public required Dictionary<int, bool> Country { get; init; }
+        }
+
+        // Loads the user's include/exclude selections for every filterable entity in one place.
+        private static FilterMaps LoadFilterMaps(ShowlistDbContext db) => new()
+        {
+            Network = db.Networks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value),
+            WebNetwork = db.WebNetworks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value),
+            Genre = db.GenreTexts.Where(g => g.Wanted != null).ToDictionary(g => g.Id, g => g.Wanted.Value),
+            Language = db.Languages.Where(l => l.Wanted != null).ToDictionary(l => l.Id, l => l.Wanted.Value),
+            Type = db.Types.Where(t => t.Wanted != null).ToDictionary(t => t.Id, t => t.Wanted.Value),
+            Country = db.Countrys.Where(c => c.Wanted != null).ToDictionary(c => c.Id, c => c.Wanted.Value),
+        };
+
         private EpFilter CreateEpFilter(
                 Episode e,
                 Dictionary<int, bool> showFilterMap,
-                Dictionary<int, bool> networkFilterMap,
-                Dictionary<int, bool> webnetworkFilterMap,
-                Dictionary<int, bool> genreFilterMap,
-                Dictionary<int, bool> languageFilterMap,
-                Dictionary<int, bool> typeFilterMap,
-                Dictionary<int, bool> countryFilterMap,
+                FilterMaps maps,
                 List<TVSite> tvsites
             )
         {
@@ -456,28 +486,28 @@ namespace Showlist2026.Services
                     if (!showInc && !ef.AlreadyDecidedUpon) ef.Activelyignored = true;
                 }
 
-                if (ef.ep.show.Types != null && typeFilterMap.TryGetValue(ef.ep.show.Types.Id, out var typeInc))
+                if (ef.ep.show.Types != null && maps.Type.TryGetValue(ef.ep.show.Types.Id, out var typeInc))
                 {
                     ef.typeinclude = typeInc;
                     if (typeInc && !ef.AlreadyDecidedUpon) ef.Activelyselected = true;
                     if (!typeInc && !ef.AlreadyDecidedUpon) ef.Activelyignored = true;
                 }
 
-                if (ef.ep.show.Networks != null && networkFilterMap.TryGetValue(ef.ep.show.Networks.Id, out var netInc))
+                if (ef.ep.show.Networks != null && maps.Network.TryGetValue(ef.ep.show.Networks.Id, out var netInc))
                 {
                     ef.networkinclude = netInc;
                     if (netInc && !ef.AlreadyDecidedUpon) ef.Activelyselected = true;
                     if (!netInc && !ef.AlreadyDecidedUpon) ef.Activelyignored = true;
                 }
 
-                if (ef.ep.show.WebNetworks != null && webnetworkFilterMap.TryGetValue(ef.ep.show.WebNetworks.Id, out var webInc))
+                if (ef.ep.show.WebNetworks != null && maps.WebNetwork.TryGetValue(ef.ep.show.WebNetworks.Id, out var webInc))
                 {
                     ef.webnetworkinclude = webInc;
                     if (webInc && !ef.AlreadyDecidedUpon) ef.Activelyselected = true;
                     if (!webInc && !ef.AlreadyDecidedUpon) ef.Activelyignored = true;
                 }
 
-                if (ef.ep.show.Languages != null && languageFilterMap.TryGetValue(ef.ep.show.Languages.Id, out var langInc))
+                if (ef.ep.show.Languages != null && maps.Language.TryGetValue(ef.ep.show.Languages.Id, out var langInc))
                 {
                     ef.languageinclude = langInc;
                     if (langInc && !ef.AlreadyDecidedUpon) ef.Activelyselected = true;
@@ -485,13 +515,13 @@ namespace Showlist2026.Services
                 }
 
                 //Country filters checked against both main Network and WebNetwork in turn
-                if (ef.ep.show.Networks?.country != null && countryFilterMap.TryGetValue(ef.ep.show.Networks.country.Id, out var cntInc))
+                if (ef.ep.show.Networks?.country != null && maps.Country.TryGetValue(ef.ep.show.Networks.country.Id, out var cntInc))
                 {
                     ef.countryinclude = cntInc;
                     if (cntInc && !ef.AlreadyDecidedUpon) ef.Activelyselected = true;
                     if (!cntInc && !ef.AlreadyDecidedUpon) ef.Activelyignored = true;
                 }
-                if (ef.ep.show.WebNetworks?.country != null && countryFilterMap.TryGetValue(ef.ep.show.WebNetworks.country.Id, out var wcntInc))
+                if (ef.ep.show.WebNetworks?.country != null && maps.Country.TryGetValue(ef.ep.show.WebNetworks.country.Id, out var wcntInc))
                 {
                     if (ef.countryinclude == null) ef.countryinclude = wcntInc;
                     if (wcntInc && !ef.AlreadyDecidedUpon) ef.Activelyselected = true;
@@ -502,7 +532,7 @@ namespace Showlist2026.Services
                 {
                     foreach (var g in ef.ep.show.Genres)
                     {
-                        if (g.genretext != null && genreFilterMap.TryGetValue(g.genretext.Id, out var gInc))
+                        if (g.genretext != null && maps.Genre.TryGetValue(g.genretext.Id, out var gInc))
                         {
                             if (ef.genreinclude == null) ef.genreinclude = gInc;
                             if (gInc && !ef.AlreadyDecidedUpon) ef.Activelyselected = true;
@@ -518,6 +548,7 @@ namespace Showlist2026.Services
 
         public List<EpFilter> UndecidedShows()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
 
@@ -529,20 +560,15 @@ namespace Showlist2026.Services
             _logger.LogDebug($"PERF[UndecidedShows] Decided shows loaded ({decidedShowIds.Count}): {sw.ElapsedMilliseconds}ms");
 
             // Load user filter exclusions directly from main entity tables
-            var networkFilterMap = _db.Networks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var webnetworkFilterMap = _db.WebNetworks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var genreFilterMap = _db.GenreTexts.Where(g => g.Wanted != null).ToDictionary(g => g.Id, g => g.Wanted.Value);
-            var languageFilterMap = _db.Languages.Where(l => l.Wanted != null).ToDictionary(l => l.Id, l => l.Wanted.Value);
-            var typeFilterMap = _db.Types.Where(t => t.Wanted != null).ToDictionary(t => t.Id, t => t.Wanted.Value);
-            var countryFilterMap = _db.Countrys.Where(c => c.Wanted != null).ToDictionary(c => c.Id, c => c.Wanted.Value);
+            var maps = LoadFilterMaps(_db);
 
             // Build sets of excluded IDs from filters
-            var excludedNetworkIds = networkFilterMap.Where(n => !n.Value).Select(n => n.Key).ToHashSet();
-            var excludedWebNetworkIds = webnetworkFilterMap.Where(n => !n.Value).Select(n => n.Key).ToHashSet();
-            var excludedTypeIds = typeFilterMap.Where(t => !t.Value).Select(t => t.Key).ToHashSet();
-            var excludedLangIds = languageFilterMap.Where(l => !l.Value).Select(l => l.Key).ToHashSet();
-            var excludedCountryIds = countryFilterMap.Where(c => !c.Value).Select(c => c.Key).ToHashSet();
-            var excludedGenreTextIds = genreFilterMap.Where(g => !g.Value).Select(g => g.Key).ToHashSet();
+            var excludedNetworkIds = maps.Network.Where(n => !n.Value).Select(n => n.Key).ToHashSet();
+            var excludedWebNetworkIds = maps.WebNetwork.Where(n => !n.Value).Select(n => n.Key).ToHashSet();
+            var excludedTypeIds = maps.Type.Where(t => !t.Value).Select(t => t.Key).ToHashSet();
+            var excludedLangIds = maps.Language.Where(l => !l.Value).Select(l => l.Key).ToHashSet();
+            var excludedCountryIds = maps.Country.Where(c => !c.Value).Select(c => c.Key).ToHashSet();
+            var excludedGenreTextIds = maps.Genre.Where(g => !g.Value).Select(g => g.Key).ToHashSet();
             _logger.LogDebug($"PERF[UndecidedShows] Filters loaded: {sw.ElapsedMilliseconds}ms");
 
             // Load all show FK IDs for filter matching
@@ -658,8 +684,7 @@ namespace Showlist2026.Services
             foreach (var e in eps.Where(a => a.show != null))
             {
                 EpFilters.Add(
-                    CreateEpFilter(e, showFilterMap, networkFilterMap, webnetworkFilterMap,
-                        genreFilterMap, languageFilterMap, typeFilterMap, countryFilterMap, tvsites)
+                    CreateEpFilter(e, showFilterMap, maps, tvsites)
                 );
             }
 
@@ -670,6 +695,7 @@ namespace Showlist2026.Services
 
         public List<EpFilter> NextUnwatchedPerShow()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
 
@@ -774,18 +800,20 @@ namespace Showlist2026.Services
 
         public List<Show> NoFolderList()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var x = _db.Shows
                     .Where(s => s.Wanted == true)
                    .OrderBy(s => s.name);
 
             var results = x.Where(s => string.IsNullOrEmpty(s.FolderName)).ToList();
-            PopulateSuggestedFolderNames(results);
+            PopulateSuggestedFolderNames(_db, results);
             return results;
         }
 
 
         public List<ShowFilter> ComingSoonForUser(int daysminus = 1, int daysplus = 366)
         {
+            using var _db = _dbFactory.CreateDbContext();
 
 
             //Used to use a view but that ended up being too restrictive
@@ -809,12 +837,7 @@ namespace Showlist2026.Services
 
             var showFilterMap = _db.Shows.Where(s => s.Wanted != null)
                 .ToDictionary(s => s.Id, s => s.Wanted.Value);
-            var networkFilterMap = _db.Networks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var webnetworkFilterMap = _db.WebNetworks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var genreFilterMap = _db.GenreTexts.Where(g => g.Wanted != null).ToDictionary(g => g.Id, g => g.Wanted.Value);
-            var languageFilterMap = _db.Languages.Where(l => l.Wanted != null).ToDictionary(l => l.Id, l => l.Wanted.Value);
-            var typeFilterMap = _db.Types.Where(t => t.Wanted != null).ToDictionary(t => t.Id, t => t.Wanted.Value);
-            var countryFilterMap = _db.Countrys.Where(c => c.Wanted != null).ToDictionary(c => c.Id, c => c.Wanted.Value);
+            var maps = LoadFilterMaps(_db);
 
             List<ShowFilter> EpFilters = new List<ShowFilter>(eps.Count);
             foreach (var e in eps)
@@ -830,7 +853,7 @@ namespace Showlist2026.Services
                     decided = true;
                 }
 
-                if (!decided && ef.ep.Types != null && typeFilterMap.TryGetValue(ef.ep.Types.Id, out var typeInc))
+                if (!decided && ef.ep.Types != null && maps.Type.TryGetValue(ef.ep.Types.Id, out var typeInc))
                 {
                     ef.typeinclude = typeInc;
                     if (typeInc) ef.activelyselected = true;
@@ -838,7 +861,7 @@ namespace Showlist2026.Services
                     decided = true;
                 }
 
-                if (!decided && ef.ep.Networks != null && networkFilterMap.TryGetValue(ef.ep.Networks.Id, out var netInc))
+                if (!decided && ef.ep.Networks != null && maps.Network.TryGetValue(ef.ep.Networks.Id, out var netInc))
                 {
                     ef.networkinclude = netInc;
                     if (netInc) ef.activelyselected = true;
@@ -846,7 +869,7 @@ namespace Showlist2026.Services
                     decided = true;
                 }
 
-                if (!decided && ef.ep.WebNetworks != null && webnetworkFilterMap.TryGetValue(ef.ep.WebNetworks.Id, out var webInc))
+                if (!decided && ef.ep.WebNetworks != null && maps.WebNetwork.TryGetValue(ef.ep.WebNetworks.Id, out var webInc))
                 {
                     ef.webnetworkinclude = webInc;
                     if (webInc) ef.activelyselected = true;
@@ -854,7 +877,7 @@ namespace Showlist2026.Services
                     decided = true;
                 }
 
-                if (!decided && ef.ep.Languages != null && languageFilterMap.TryGetValue(ef.ep.Languages.Id, out var langInc))
+                if (!decided && ef.ep.Languages != null && maps.Language.TryGetValue(ef.ep.Languages.Id, out var langInc))
                 {
                     ef.languageinclude = langInc;
                     if (langInc) ef.activelyselected = true;
@@ -862,14 +885,14 @@ namespace Showlist2026.Services
                     decided = true;
                 }
 
-                if (!decided && ef.ep.Networks?.country != null && countryFilterMap.TryGetValue(ef.ep.Networks.country.Id, out var cntInc))
+                if (!decided && ef.ep.Networks?.country != null && maps.Country.TryGetValue(ef.ep.Networks.country.Id, out var cntInc))
                 {
                     ef.countryinclude = cntInc;
                     if (cntInc) ef.activelyselected = true;
                     else ef.activelyignored = true;
                     decided = true;
                 }
-                if (!decided && ef.ep.WebNetworks?.country != null && countryFilterMap.TryGetValue(ef.ep.WebNetworks.country.Id, out var wcntInc))
+                if (!decided && ef.ep.WebNetworks?.country != null && maps.Country.TryGetValue(ef.ep.WebNetworks.country.Id, out var wcntInc))
                 {
                     if (ef.countryinclude == null) ef.countryinclude = wcntInc;
                     if (wcntInc) ef.activelyselected = true;
@@ -881,7 +904,7 @@ namespace Showlist2026.Services
                 {
                     foreach (var g in ef.ep.Genres)
                     {
-                        if (g.genretext != null && genreFilterMap.TryGetValue(g.genretext.Id, out var gInc))
+                        if (g.genretext != null && maps.Genre.TryGetValue(g.genretext.Id, out var gInc))
                         {
                             if (ef.genreinclude == null) ef.genreinclude = gInc;
                             if (!decided)
@@ -903,6 +926,7 @@ namespace Showlist2026.Services
 
         public async Task CheckNewSeasonNotifications()
         {
+            using var _db = _dbFactory.CreateDbContext();
             // Find S01E01-style episodes (season premiere, episode 1) airing in the last 24 hours
             var recentMin = DateTimeOffset.UtcNow.AddHours(-24);
             var recentMax = DateTimeOffset.UtcNow;
@@ -945,6 +969,7 @@ namespace Showlist2026.Services
 
         public HomePageStats HomePageStats()
         {
+            using var _db = _dbFactory.CreateDbContext();
             HomePageStats hps = new HomePageStats();
 
             hps.shows = _db.Shows.Count();
@@ -975,6 +1000,7 @@ namespace Showlist2026.Services
 
         public async Task<bool> ShowFilter(long id, bool? statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var show = _db.Shows.FirstOrDefault(a => a.Id == id);
@@ -989,7 +1015,7 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
@@ -997,6 +1023,7 @@ namespace Showlist2026.Services
 
         public async Task<bool> LanguageFilter(long id, bool? statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var entity = _db.Languages.FirstOrDefault(a => a.Id == id);
@@ -1008,7 +1035,7 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
@@ -1016,6 +1043,7 @@ namespace Showlist2026.Services
 
         public async Task<bool> TypeFilter(long id, bool? statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var entity = _db.Types.FirstOrDefault(a => a.Id == id);
@@ -1027,13 +1055,14 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
 
         public async Task<bool> NetworkFilter(long id, bool? statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var entity = _db.Networks.FirstOrDefault(a => a.Id == id);
@@ -1045,13 +1074,14 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
 
         public async Task<bool> WebNetworkFilter(long id, bool? statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var entity = _db.WebNetworks.FirstOrDefault(a => a.Id == id);
@@ -1063,13 +1093,14 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
 
         public async Task<bool> GenreFilter(long id, bool? statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var entity = _db.GenreTexts.FirstOrDefault(a => a.Id == id);
@@ -1081,13 +1112,14 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
 
         public async Task<bool> CountryFilter(long id, bool? statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var entity = _db.Countrys.FirstOrDefault(a => a.Id == id);
@@ -1099,31 +1131,32 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
 
         public async Task<bool> SeasonWatchedFilter(long id, long season, bool statewanted)
         {
-
-
+            using var _db = _dbFactory.CreateDbContext();
             var s = _db.Shows.Find((int)id);
-            var ee = _db.Episodes.Where(x => x.show.Id == s.Id).ToList();
+            if (s == null) return false;
 
+            var episodes = _db.Episodes
+                .Where(e => e.show.Id == s.Id && e.season == season)
+                .ToList();
 
-
-            if (s != null)
+            foreach (var ep in episodes)
             {
-                var sfirst = s.Episodes.Where(e => e.season == season).ToList();
-                foreach (var V in sfirst)
-                {
-                    await WatchedFilter(V.Id, statewanted);
-                }
+                ep.Watched = statewanted;
+                if (statewanted && ep.GivenUp)
+                    ep.GivenUp = false;
             }
 
-            return true;
+            if (episodes.Count > 0)
+                await _db.SaveChangesAsync();
 
+            return true;
         }
 
 
@@ -1133,6 +1166,7 @@ namespace Showlist2026.Services
 
         public async Task<bool> WatchedFilter(long id, bool statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var ep = _db.Episodes.Find((int)id);
@@ -1146,13 +1180,14 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
 
         public List<EpFilter> MissedEpisodes()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var sw = System.Diagnostics.Stopwatch.StartNew();
             _db.Database.SetCommandTimeout(120);
 
@@ -1203,20 +1238,14 @@ namespace Showlist2026.Services
             // 7. Build EpFilter list
             var showFilterMap = _db.Shows.Where(s => s.Wanted != null)
                 .ToDictionary(s => s.Id, s => s.Wanted.Value);
-            var networkFilterMap = _db.Networks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var webnetworkFilterMap = _db.WebNetworks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var genreFilterMap = _db.GenreTexts.Where(g => g.Wanted != null).ToDictionary(g => g.Id, g => g.Wanted.Value);
-            var languageFilterMap = _db.Languages.Where(l => l.Wanted != null).ToDictionary(l => l.Id, l => l.Wanted.Value);
-            var typeFilterMap = _db.Types.Where(t => t.Wanted != null).ToDictionary(t => t.Id, t => t.Wanted.Value);
-            var countryFilterMap = _db.Countrys.Where(c => c.Wanted != null).ToDictionary(c => c.Id, c => c.Wanted.Value);
+            var maps = LoadFilterMaps(_db);
 
             var tvsites = TvSites();
 
             var result = new List<EpFilter>();
             foreach (var e in eps.Where(a => a.show != null))
             {
-                var ef = CreateEpFilter(e, showFilterMap, networkFilterMap, webnetworkFilterMap,
-                    genreFilterMap, languageFilterMap, typeFilterMap, countryFilterMap, tvsites);
+                var ef = CreateEpFilter(e, showFilterMap, maps, tvsites);
                 result.Add(ef);
             }
 
@@ -1230,6 +1259,7 @@ namespace Showlist2026.Services
 
         public async Task<bool> GivenUpFilter(long id, bool statewanted)
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var ep = _db.Episodes.Find((int)id);
@@ -1241,13 +1271,14 @@ namespace Showlist2026.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.LogError(e, "Filter update failed");
                 return false;
             }
         }
 
         public List<EpFilter> GivenUpEpisodes()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var eps = _db.Episodes
                 .Where(e => e.GivenUp)
                 .Include(e => e.show)
@@ -1278,20 +1309,14 @@ namespace Showlist2026.Services
             // Load user filter data for filter buttons
             var showFilterMap = _db.Shows.Where(s => s.Wanted != null)
                 .ToDictionary(s => s.Id, s => s.Wanted.Value);
-            var networkFilterMap = _db.Networks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var webnetworkFilterMap = _db.WebNetworks.Where(n => n.Wanted != null).ToDictionary(n => n.Id, n => n.Wanted.Value);
-            var genreFilterMap = _db.GenreTexts.Where(g => g.Wanted != null).ToDictionary(g => g.Id, g => g.Wanted.Value);
-            var languageFilterMap = _db.Languages.Where(l => l.Wanted != null).ToDictionary(l => l.Id, l => l.Wanted.Value);
-            var typeFilterMap = _db.Types.Where(t => t.Wanted != null).ToDictionary(t => t.Id, t => t.Wanted.Value);
-            var countryFilterMap = _db.Countrys.Where(c => c.Wanted != null).ToDictionary(c => c.Id, c => c.Wanted.Value);
+            var maps = LoadFilterMaps(_db);
 
             var tvsites = TvSites();
 
             var result = new List<EpFilter>();
             foreach (var e in eps.Where(a => a.show != null))
             {
-                var ef = CreateEpFilter(e, showFilterMap, networkFilterMap, webnetworkFilterMap,
-                    genreFilterMap, languageFilterMap, typeFilterMap, countryFilterMap, tvsites);
+                var ef = CreateEpFilter(e, showFilterMap, maps, tvsites);
                 result.Add(ef);
             }
 
@@ -1300,6 +1325,7 @@ namespace Showlist2026.Services
 
         public async Task<bool> SetFolderName(long id, string foldername)
         {
+            using var _db = _dbFactory.CreateDbContext();
 
             var show = _db.Shows.Find((int)id);
             if (show != null)
@@ -1312,7 +1338,7 @@ namespace Showlist2026.Services
         }
 
 
-        public async Task<List<FileInfo>> Dirlist(string dirName, int daysOldToAllow, string filter = "*.*", int minSizeAllowed = 50000)
+        public Task<List<FileInfo>> Dirlist(string dirName, int daysOldToAllow, string filter = "*.*", int minSizeAllowed = 50000)
         {
 
             var files = Directory.GetFiles(dirName, filter, SearchOption.AllDirectories).ToList();
@@ -1329,19 +1355,20 @@ namespace Showlist2026.Services
                     }
                 }
             }
-            return filesList.OrderByDescending(f => f.LastWriteTime).ToList();
+            return Task.FromResult(filesList.OrderByDescending(f => f.LastWriteTime).ToList());
 
         }
 
 
-        public async Task<List<TouchFile>> ShowDownloaded(int years = 0)
+        public Task<List<TouchFile>> ShowDownloaded(int years = 0)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var downloads = _db.TouchFiles
                 .OrderByDescending(r => r.FileDate)
                 .Include(a => a.Episode)
                 .Include(a => a.Episode.show);
 
-            return downloads.Where(f => f.FileDate.Year == years || years == 0).ToList();
+            return Task.FromResult(downloads.Where(f => f.FileDate.Year == years || years == 0).ToList());
         }
 
         public async Task<NzBplanetJSON> NZBPlanetSearch(Show show)
@@ -1355,7 +1382,7 @@ namespace Showlist2026.Services
             {
                 searchstring = @$"&tvdbid={show.thetvdb}";
             }
-            if (!string.IsNullOrEmpty(show.showid.ToString()))
+            if (show.showid > 0)
             {
                 searchstring = @$"&tvmazeid={show.showid}";
             }
@@ -1409,11 +1436,13 @@ namespace Showlist2026.Services
         // ===== Feature 2: Statistics =====
         public StatisticsModel GetStatistics()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var stats = new StatisticsModel();
 
 
             var wantedShows = _db.Shows
                 .Where(s => s.Wanted == true)
+                .AsNoTracking()
                 .ToList();
 
             var wantedShowIds = wantedShows.Select(s => s.Id).ToHashSet();
@@ -1425,6 +1454,7 @@ namespace Showlist2026.Services
             var watchedEps = _db.Episodes
                 .Where(e => e.Watched)
                 .Include(e => e.show)
+                .AsNoTracking()
                 .ToList();
 
             stats.TotalEpisodesWatched = watchedEps.Count;
@@ -1449,10 +1479,19 @@ namespace Showlist2026.Services
             var genres = _db.Genres
                 .Include(g => g.genretext)
                 .Where(g => g.show != null && watchedShowIds.Contains(g.show.Id) && g.genretext != null)
+                .AsNoTracking()
                 .ToList()
                 .GroupBy(g => g.genretext.genre)
                 .ToDictionary(g => g.Key, g => g.Select(x => x.show.Id).Distinct().Count());
             stats.GenreBreakdown = genres;
+
+            // Total episode count per watched show in ONE query.
+            // (Previously this was an N+1: a separate COUNT query ran for every watched show.)
+            var totalEpsByShow = _db.Episodes
+                .Where(e => watchedShowIds.Contains(e.show.Id))
+                .GroupBy(e => e.show.Id)
+                .Select(g => new { ShowId = g.Key, Count = g.Count() })
+                .ToDictionary(x => x.ShowId, x => x.Count);
 
             // Most watched shows
             stats.MostWatchedShows = watchedEps
@@ -1463,7 +1502,7 @@ namespace Showlist2026.Services
                     ShowId = g.Key,
                     ShowName = g.First().show.name ?? "",
                     EpisodesWatched = g.Count(),
-                    TotalEpisodes = _db.Episodes.Count(e => e.show.Id == g.Key)
+                    TotalEpisodes = totalEpsByShow.TryGetValue(g.Key, out var tc) ? tc : 0
                 })
                 .OrderByDescending(s => s.EpisodesWatched)
                 .Take(15)
@@ -1493,6 +1532,7 @@ namespace Showlist2026.Services
             int? languageId = null, int? countryId = null, string? wanted = null,
             int page = 1, int pageSize = 50)
         {
+            using var _db = _dbFactory.CreateDbContext();
             // Build a lean filter query without Includes
             IQueryable<Show> query = _db.Shows.AsQueryable();
 
@@ -1588,6 +1628,7 @@ namespace Showlist2026.Services
                 .Include(s => s.Languages)
                 .Where(s => pageIds.Contains(s.Id))
                 .OrderBy(s => s.name)
+                .AsNoTracking()
                 .ToList();
 
             return (results, totalCount);
@@ -1596,6 +1637,7 @@ namespace Showlist2026.Services
         // ===== Feature 4: Bulk actions =====
         public async Task BulkSetShowFilter(List<long> showIds, bool? state)
         {
+            using var _db = _dbFactory.CreateDbContext();
 
 
             var shows = _db.Shows.Where(s => showIds.Contains(s.Id)).ToList();
@@ -1609,6 +1651,7 @@ namespace Showlist2026.Services
 
         public async Task CatchUpShow(long showId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var unwatched = _db.Episodes
                 .Where(e => e.show.Id == showId && e.AirDateOffset2 < DateTimeOffset.UtcNow && !e.Watched)
                 .ToList();
@@ -1625,6 +1668,7 @@ namespace Showlist2026.Services
 
         public async Task GiveUpShow(long showId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var unwatched = _db.Episodes
                 .Where(e => e.show.Id == showId && e.AirDateOffset2 < DateTimeOffset.UtcNow && !e.Watched && !e.GivenUp)
                 .ToList();
@@ -1639,6 +1683,7 @@ namespace Showlist2026.Services
         // ===== Feature 6: Download progress =====
         public List<DownloadProgressModel> GetDownloadProgress()
         {
+            using var _db = _dbFactory.CreateDbContext();
 
 
             var wantedShowIds = _db.Shows
@@ -1661,6 +1706,7 @@ namespace Showlist2026.Services
             var shows = _db.Shows
                 .Where(s => wantedShowIds.Contains(s.Id))
                 .Include(s => s.Episodes)
+                .AsNoTracking()
                 .ToList();
 
             var result = new List<DownloadProgressModel>();
@@ -1693,6 +1739,7 @@ namespace Showlist2026.Services
         // ===== Feature 10: Export/Import =====
         public string ExportUserDataAsJson()
         {
+            using var _db = _dbFactory.CreateDbContext();
 
 
             var showSelections = _db.Shows
@@ -1731,6 +1778,7 @@ namespace Showlist2026.Services
 
         public async Task<int> ImportUserDataFromJson(string json)
         {
+            using var _db = _dbFactory.CreateDbContext();
 
             var import = JsonSerializer.Deserialize<ExportModel>(json);
             if (import == null) return 0;
@@ -1782,6 +1830,7 @@ namespace Showlist2026.Services
 
         public async Task SetShowNotes(long showId, string notes)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var show = _db.Shows.Find((int)showId);
             if (show != null)
             {
@@ -1793,6 +1842,7 @@ namespace Showlist2026.Services
 
         public async Task SetShowPriority(long showId, int priority)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var show = _db.Shows.Find((int)showId);
             if (show != null)
             {
@@ -1803,6 +1853,7 @@ namespace Showlist2026.Services
 
         public Dictionary<int, (int watched, int total)> GetEpisodeCountsForShows(List<int> showIds)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var totalByShow = _db.Episodes
                 .Where(e => showIds.Contains(e.show.Id))
                 .GroupBy(e => e.show.Id)
@@ -1832,6 +1883,7 @@ namespace Showlist2026.Services
 
         public List<Show> GetSimilarShows(long showId, int max = 5)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var showGenreIds = _db.Genres
                 .Where(g => g.show != null && g.show.Id == showId && g.genretext != null)
                 .Select(g => g.genretext.Id)
@@ -1867,6 +1919,7 @@ namespace Showlist2026.Services
                 .Include(s => s.Languages)
                 .Include(s => s.Genres).ThenInclude(g => g.genretext)
                 .Where(s => candidateIds.Contains(s.Id))
+                .AsNoTracking()
                 .ToList();
 
             // Apply all user filters - exclude if any filter matches
@@ -1893,6 +1946,7 @@ namespace Showlist2026.Services
 
         public List<Show> FindDuplicateShows()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var dupeShowIds = _db.Shows
                 .GroupBy(s => s.showid)
                 .Where(g => g.Count() > 1)
@@ -1906,12 +1960,20 @@ namespace Showlist2026.Services
 
         public async Task<List<TrendingShowModel>> GetTrendingShows()
         {
+            using var _db = _dbFactory.CreateDbContext();
             try
             {
                 var schedule = await ($"{_options.TvMazeBaseUrl}/schedule")
                     .GetJsonAsync<List<System.Text.Json.JsonElement>>();
 
-                var localShowIds = _db.Shows.Select(s => s.showid).ToHashSet();
+                // Map TVMaze show id -> local DB id in a single query (avoids an N+1
+                // FirstOrDefault per schedule item below).
+                var localIdByShowId = _db.Shows
+                    .Select(s => new { s.showid, s.Id })
+                    .ToList()
+                    .GroupBy(x => x.showid)
+                    .ToDictionary(g => g.Key, g => g.First().Id);
+                var localShowIds = localIdByShowId.Keys.ToHashSet();
                 var wantedShowIds = _db.Shows
                     .Where(s => s.Wanted == true)
                     .Select(s => s.showid)
@@ -1948,7 +2010,7 @@ namespace Showlist2026.Services
                         Summary = showEl.TryGetProperty("summary", out var sm) ? sm.GetString() : null,
                         EpisodeCount = 1,
                         AlreadyTracked = wantedShowIds.Contains(id) || localShowIds.Contains(id),
-                        LocalShowId = localShowIds.Contains(id) ? (int?)_db.Shows.FirstOrDefault(s => s.showid == id)?.Id : null
+                        LocalShowId = localIdByShowId.TryGetValue(id, out var localId) ? localId : (int?)null
                     };
                 }
 
@@ -1966,19 +2028,21 @@ namespace Showlist2026.Services
 
         public ShowComparisonModel CompareShows(long showId1, long showId2)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var model = new ShowComparisonModel();
-            model.Show1 = BuildComparisonSide(showId1);
-            model.Show2 = BuildComparisonSide(showId2);
+            model.Show1 = BuildComparisonSide(_db, showId1);
+            model.Show2 = BuildComparisonSide(_db, showId2);
             return model;
         }
 
-        private ShowComparisonSide BuildComparisonSide(long showId)
+        private ShowComparisonSide BuildComparisonSide(ShowlistDbContext _db, long showId)
         {
             var show = _db.Shows
                 .Include(s => s.Episodes)
                 .Include(s => s.Networks)
                 .Include(s => s.WebNetworks)
                 .Include(s => s.Genres).ThenInclude(g => g.genretext)
+                .AsNoTracking()
                 .FirstOrDefault(s => s.Id == showId);
 
             if (show == null) return new ShowComparisonSide();
@@ -1999,6 +2063,7 @@ namespace Showlist2026.Services
 
         public string ExportUserDataAsCsv()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("Type,ShowId,ShowName,Season,Episode,Include,FolderName");
 
@@ -2023,6 +2088,7 @@ namespace Showlist2026.Services
 
         public StorageDashboardModel GetStorageDashboard()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var model = new StorageDashboardModel();
 
             var tvDirs = _db.TVDirectories
@@ -2033,7 +2099,7 @@ namespace Showlist2026.Services
                 return model;
 
             // Build folder -> show lookup
-            var allShows = _db.Shows.ToList();
+            var allShows = _db.Shows.AsNoTracking().ToList();
             var wantedShowIds = _db.Shows
                 .Where(s => s.Wanted == true)
                 .Select(s => s.Id)
@@ -2139,7 +2205,7 @@ namespace Showlist2026.Services
 
         private record ParsedPathLine(string ShowFolder, long? Season, long? Episode);
 
-        private (Dictionary<string, Show> folderLookup, List<ParsedPathLine> parsed, int linesSkipped, HashSet<string> unmatchedFolders) ParseImportPaths(string fileContent)
+        private (Dictionary<string, Show> folderLookup, List<ParsedPathLine> parsed, int linesSkipped, HashSet<string> unmatchedFolders) ParseImportPaths(ShowlistDbContext _db, string fileContent)
         {
             var lines = fileContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -2215,7 +2281,8 @@ namespace Showlist2026.Services
 
         public ImportPathsPreview PreviewImportWatchedFromPaths(string fileContent)
         {
-            var (folderLookup, parsed, linesSkipped, unmatchedFolders) = ParseImportPaths(fileContent);
+            using var _db = _dbFactory.CreateDbContext();
+            var (folderLookup, parsed, linesSkipped, unmatchedFolders) = ParseImportPaths(_db, fileContent);
 
             var existingWantedShowIds = _db.Shows.Where(s => s.Wanted != null).Select(s => s.Id).ToHashSet();
 
@@ -2261,7 +2328,8 @@ namespace Showlist2026.Services
 
         public async Task<(int showsMatched, int episodesMarked)> CommitImportWatchedFromPaths(string fileContent)
         {
-            var (folderLookup, parsed, _, _) = ParseImportPaths(fileContent);
+            using var _db = _dbFactory.CreateDbContext();
+            var (folderLookup, parsed, _, _) = ParseImportPaths(_db, fileContent);
 
             var existingWantedShowIds = _db.Shows.Where(s => s.Wanted != null).Select(s => s.Id).ToHashSet();
             var existingWatchedEpIds = _db.Episodes.Where(e => e.Watched).Select(e => e.Id).ToHashSet();
@@ -2314,11 +2382,12 @@ namespace Showlist2026.Services
 
         public List<DuplicateFileEntry> FindDuplicateEpisodeFiles()
         {
+            using var _db = _dbFactory.CreateDbContext();
             var dirs = _db.TVDirectories
                 .Where(d => d.DaysToScan != 0)
                 .ToList();
 
-            var allShows = _db.Shows.Where(s => s.Wanted == true).ToList();
+            var allShows = _db.Shows.Where(s => s.Wanted == true).AsNoTracking().ToList();
 
             var allFiles = new List<DuplicateFileEntry>();
 
@@ -2402,15 +2471,60 @@ namespace Showlist2026.Services
 
         public bool DeleteFile(string filePath)
         {
+            using var _db = _dbFactory.CreateDbContext();
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 return false;
 
-            File.Delete(filePath);
-            return true;
+            // Only ever delete files that live *inside* a configured TV directory.
+            // This blocks path traversal / arbitrary-file-deletion via the dedupe UI.
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "DeleteFile: invalid path {FilePath}", filePath);
+                return false;
+            }
+
+            var allowedRoots = _db.TVDirectories
+                .Where(d => !string.IsNullOrWhiteSpace(d.Name))
+                .Select(d => d.Name)
+                .ToList()
+                .Select(n =>
+                {
+                    try { return Path.GetFullPath(n.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar); }
+                    catch { return null; }
+                })
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToList();
+
+            bool insideAllowedRoot = allowedRoots.Any(root =>
+                fullPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                fullPath.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+
+            if (!insideAllowedRoot)
+            {
+                _logger.LogWarning("DeleteFile: refused to delete {FilePath} - not within any configured TV directory", fullPath);
+                return false;
+            }
+
+            try
+            {
+                File.Delete(fullPath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "DeleteFile: failed to delete {FilePath}", fullPath);
+                return false;
+            }
         }
 
         public async Task<NzbSiteCrawlSummary> CrawlNzbSitesForShow(long showId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var summary = new NzbSiteCrawlSummary();
 
             var show = _db.Shows
@@ -3021,6 +3135,7 @@ namespace Showlist2026.Services
         /// </summary>
         public async Task<NzbSiteCrawlSummary> CrawlNzbRssFeedsForShow(long showId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var summary = new NzbSiteCrawlSummary();
 
             var show = _db.Shows
@@ -3314,6 +3429,7 @@ namespace Showlist2026.Services
 
         public List<ExistingFolderMatch> FindExistingFolders(Show show, List<ShowFolderAlias> aliases)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var root = _options.TvNameListPath;
             if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
                 return new();
@@ -3442,6 +3558,7 @@ namespace Showlist2026.Services
 
         public List<ShowFolderAlias> GetFolderAliases(long showId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.ShowFolderAliases
                 .Where(a => a.ShowId == (int)showId)
                 .OrderBy(a => a.AliasName)
@@ -3450,6 +3567,7 @@ namespace Showlist2026.Services
 
         public async Task AddFolderAlias(long showId, string aliasName, int seasonOffset = 0)
         {
+            using var _db = _dbFactory.CreateDbContext();
             if (string.IsNullOrWhiteSpace(aliasName)) return;
 
             var existing = _db.ShowFolderAliases
@@ -3476,6 +3594,7 @@ namespace Showlist2026.Services
 
         public async Task RemoveFolderAlias(int aliasId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var alias = _db.ShowFolderAliases.Find(aliasId);
             if (alias != null)
             {
@@ -3488,6 +3607,7 @@ namespace Showlist2026.Services
 
         public List<Friend> GetFriends()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.Friends
                 .Include(f => f.InterestedShows)
                     .ThenInclude(fs => fs.Show)
@@ -3497,11 +3617,12 @@ namespace Showlist2026.Services
 
         public async Task<Friend> AddFriend(string name, string email, string folderPath)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var friend = new Friend
             {
-                Name = name.Trim(),
-                Email = email.Trim(),
-                FolderPath = folderPath.Trim()
+                Name = (name ?? "").Trim(),
+                Email = (email ?? "").Trim(),
+                FolderPath = (folderPath ?? "").Trim()
             };
             _db.Friends.Add(friend);
             await _db.SaveChangesAsync();
@@ -3510,18 +3631,20 @@ namespace Showlist2026.Services
 
         public async Task UpdateFriend(int id, string name, string email, string folderPath)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var friend = _db.Friends.Find(id);
             if (friend != null)
             {
-                friend.Name = name.Trim();
-                friend.Email = email.Trim();
-                friend.FolderPath = folderPath.Trim();
+                friend.Name = (name ?? "").Trim();
+                friend.Email = (email ?? "").Trim();
+                friend.FolderPath = (folderPath ?? "").Trim();
                 await _db.SaveChangesAsync();
             }
         }
 
         public async Task DeleteFriend(int id)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var friend = _db.Friends
                 .Include(f => f.InterestedShows)
                 .FirstOrDefault(f => f.Id == id);
@@ -3537,6 +3660,7 @@ namespace Showlist2026.Services
 
         public async Task AddFriendShow(int friendId, int showId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             bool exists = _db.FriendShows.Any(fs => fs.FriendId == friendId && fs.ShowId == showId);
             if (!exists)
             {
@@ -3547,6 +3671,7 @@ namespace Showlist2026.Services
 
         public async Task RemoveFriendShow(int friendShowId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var fs = _db.FriendShows.Find(friendShowId);
             if (fs != null)
             {
@@ -3557,14 +3682,17 @@ namespace Showlist2026.Services
 
         public List<Show> GetWatchedShows()
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.Shows
                 .Where(s => s.Episodes.Any(e => e.Watched))
                 .OrderBy(s => s.name)
+                .AsNoTracking()
                 .ToList();
         }
 
         public List<FriendCopy> GetRecentCopiesForFriend(int friendId, int count = 10)
         {
+            using var _db = _dbFactory.CreateDbContext();
             return _db.FriendCopies
                 .Where(c => c.FriendId == friendId)
                 .OrderByDescending(c => c.CopiedAt)
@@ -3576,6 +3704,7 @@ namespace Showlist2026.Services
 
         public List<ShowLink> GetShowLinks(long showId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             int id = (int)showId;
             return _db.ShowLinks
                 .Include(sl => sl.PredecessorShow)
@@ -3586,6 +3715,7 @@ namespace Showlist2026.Services
 
         public async Task AddShowLink(long predecessorShowId, long successorShowId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             int predId = (int)predecessorShowId;
             int succId = (int)successorShowId;
 
@@ -3606,6 +3736,7 @@ namespace Showlist2026.Services
 
         public async Task RemoveShowLink(int showLinkId)
         {
+            using var _db = _dbFactory.CreateDbContext();
             var link = _db.ShowLinks.Find(showLinkId);
             if (link != null)
             {

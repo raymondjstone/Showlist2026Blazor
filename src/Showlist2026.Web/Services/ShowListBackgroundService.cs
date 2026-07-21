@@ -291,16 +291,9 @@ namespace Showlist2026.Services
         public async Task<bool> RefreshShowPage(int pagenofrom, int pagenoto)
         {
 
-            List<Show> slist = _db.Shows
-                .Where( s => s.page >= pagenofrom && s.page <= pagenoto)
-                .Include(s => s.Types)
-                .Include(s => s.Genres)
-                .Include(s => s.WebNetworks)
-                .Include(s => s.Networks)
-                .Include(s => s.Networks.country)
-                .Include(s => s.WebNetworks.country)
-                .Include(s => s.Episodes)
-                .ToList();
+            // (Previously pre-loaded every show in the page range with all navigations here,
+            // but it was never used — the per-show lookup below re-queries. Dropped to save
+            // a heavy split query on each call.)
             List<Type> typelist = _db.Types.ToList();
             List<Timezone> timezonelist = _db.Timezones.ToList();
             List<Language> languagelist = _db.Languages.ToList();
@@ -416,7 +409,7 @@ namespace Showlist2026.Services
                                 networkid = su.Network.Id, name = su.Network.Name,
                                 timezone = su.Network.Country.Timezone,
                                 country = c,
-                                tz = timezonelist.First(x => x.timezone == su.Network.Country.Timezone)
+                                tz = getTimezone(timezonelist, su.Network.Country.Code)
                             };
                             networklist.Add(nw);
                         }
@@ -428,7 +421,7 @@ namespace Showlist2026.Services
                             {
                                 webid = su.WebChannel.Id, name = su.WebChannel.Name,
                                 timezone = su.WebChannel.Country.Timezone, country = c,
-                                tz = timezonelist.First(x => x.timezone == su.Network.Country.Timezone)
+                                tz = getTimezone(timezonelist, su.WebChannel.Country.Code)
                             };
                             webnetworklist.Add(wnw);
                         }
@@ -828,7 +821,6 @@ namespace Showlist2026.Services
                                 s.name = su.Name;
                                 s.status = su.Status;
                                 s.updated = su.Updated.ToString();
-                                s.page = s.page;
                                 s.Networks = nw;
                                 s.WebNetworks = wnw;
                                 s.summary = su.Summary;
@@ -837,7 +829,7 @@ namespace Showlist2026.Services
                                 s.Languages = l;
 
                                 s.url = url;
-                                s.scheduletime = su.Schedule.Time.ToString();
+                                s.scheduletime = su.Schedule?.Time;
                                 s.scheduledays = days;
                                 s.premiered = su.Premiered?.ToString();
                                 s.imagemed = med;
@@ -1006,10 +998,15 @@ namespace Showlist2026.Services
             Dictionary<string, long> showupdates = await $"{_options.TvMazeBaseUrl}/updates/shows".GetJsonAsync<Dictionary<string, long>>();
 
             List<Show> slist = _db.Shows.ToList();
+            // Index by TVMaze show id once. The TVMaze updates feed and the local show table
+            // are each ~tens of thousands of rows, so a per-update FirstOrDefault scan was O(n^2).
+            var byShowId = slist
+                .GroupBy(a => a.showid)
+                .ToDictionary(g => g.Key, g => g.First());
             foreach (var su in showupdates)
             {
                 long sux = long.Parse(su.Key);
-                Show s = slist.FirstOrDefault(a => a.showid == sux);
+                byShowId.TryGetValue(sux, out Show s);
                 double p = Math.Floor((double)sux / 250);
 
                 if (s != null)
@@ -1174,7 +1171,8 @@ namespace Showlist2026.Services
         /// parsed = the parsed (season, episode) from the filename (null when unparseable).
         /// </returns>
         private (Show? matchedShow, Episode? matchedEpisode, Show? directShow, (long season, long episode)? parsed)
-            ResolveShowEpisode(string showdir, string fileName, List<Show> userShows, List<ShowFolderAlias> aliases)
+            ResolveShowEpisode(string showdir, string fileName, List<Show> userShows, List<ShowFolderAlias> aliases,
+                Dictionary<int, Dictionary<(long season, long number), Episode>> episodesByShow)
         {
             var key = showdir.ToLower().Trim();
 
@@ -1192,11 +1190,11 @@ namespace Showlist2026.Services
             var ep = parsed.Value.episode;
 
             // 1) Direct show at the parsed season wins.
-            if (directShow != null)
+            if (directShow != null
+                && episodesByShow.TryGetValue(directShow.Id, out var directEps)
+                && directEps.TryGetValue((season, ep), out var directEp))
             {
-                var directEp = _db.Episodes.FirstOrDefault(e => e.show.Id == directShow.Id && e.number == ep && e.season == season);
-                if (directEp != null)
-                    return (directShow, directEp, directShow, parsed);
+                return (directShow, directEp, directShow, parsed);
             }
 
             // 2) Continuation candidates: aliases whose name matches this folder, with a season offset.
@@ -1206,21 +1204,89 @@ namespace Showlist2026.Services
             {
                 var effectiveSeason = season - alias.SeasonOffset;
                 if (effectiveSeason < 1) continue;
-                var contEp = _db.Episodes.FirstOrDefault(e => e.show.Id == alias.Show!.Id && e.number == ep && e.season == effectiveSeason);
-                if (contEp != null)
+                if (episodesByShow.TryGetValue(alias.Show!.Id, out var contEps)
+                    && contEps.TryGetValue((effectiveSeason, ep), out var contEp))
+                {
                     return (alias.Show, contEp, directShow, parsed);
+                }
             }
 
             // Parsed fine, but no episode matched anywhere.
             return (directShow, null, directShow, parsed);
         }
 
+        /// <summary>
+        /// Loads every episode for the given shows once, keyed by show id then (season, number),
+        /// so the per-file scan in <see cref="ShowDownloadedJob"/> / <see cref="ScanDirectoryFull"/>
+        /// can resolve episodes from memory instead of issuing a DB query per file.
+        /// Episodes are tracked so callers can flip Watched and have it persisted on SaveChanges.
+        /// </summary>
+        private Dictionary<int, Dictionary<(long season, long number), Episode>> BuildEpisodeLookup(IEnumerable<int> showIds)
+        {
+            var idSet = showIds.ToHashSet();
+            var result = new Dictionary<int, Dictionary<(long, long), Episode>>();
+            if (idSet.Count == 0) return result;
+
+            var eps = _db.Episodes
+                .Where(e => idSet.Contains(e.show.Id))
+                .Include(e => e.show)
+                .ToList();
+
+            foreach (var e in eps)
+            {
+                if (e.show == null) continue;
+                if (!result.TryGetValue(e.show.Id, out var inner))
+                {
+                    inner = new Dictionary<(long, long), Episode>();
+                    result[e.show.Id] = inner;
+                }
+                var k = (e.season ?? -1, e.number ?? -1);
+                // First match wins, mirroring the old FirstOrDefault behaviour.
+                inner.TryAdd(k, e);
+            }
+
+            return result;
+        }
+
+        private HashSet<int> RelevantShowIds(List<Show> userShows, List<ShowFolderAlias> aliases)
+        {
+            var ids = new HashSet<int>(userShows.Select(s => s.Id));
+            foreach (var a in aliases)
+                if (a.Show != null) ids.Add(a.Show.Id);
+            return ids;
+        }
+
+        /// <summary>
+        /// Loads all existing TouchFiles once, keyed by name (case-insensitive, matching SQL's
+        /// default collation). Tracked, so callers can mutate and persist on SaveChanges.
+        /// Replaces a per-file "SELECT ... WHERE Name = @n" query during the scan.
+        /// </summary>
+        private Dictionary<string, TouchFile> LoadTouchFilesByName()
+        {
+            var map = new Dictionary<string, TouchFile>(StringComparer.OrdinalIgnoreCase);
+            foreach (var t in _db.TouchFiles.Where(t => t.Name != null).ToList())
+                map.TryAdd(t.Name!, t);
+            return map;
+        }
+
+        /// <summary>Existing TouchFolder names, loaded once instead of a query per folder.</summary>
+        private HashSet<string> LoadTouchFolderNames()
+        {
+            return _db.TouchFolder
+                .Where(t => t.Name != null)
+                .Select(t => t.Name!)
+                .ToList()
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
         public async Task<bool> ShowDownloadedJob()
         {
-            List<string> foundShowFolder = new List<string>(600000);
-            List<TouchFile> foundShowFiles = new (600000);
-            var UserShows = _db.Shows.Where(s => s.Wanted == true).ToList();
+            var foundShowFolder = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var UserShows = _db.Shows.Where(s => s.Wanted == true).AsNoTracking().ToList();
             var FolderAliases = _db.ShowFolderAliases.Include(a => a.Show).ToList();
+            var episodesByShow = BuildEpisodeLookup(RelevantShowIds(UserShows, FolderAliases));
+            var touchFilesByName = LoadTouchFilesByName();
+            var existingFolderNames = LoadTouchFolderNames();
             var dirs = _db.TVDirectories
                 .Where(d => d.DaysToScan != 0)
                 .OrderByDescending(d =>d.MinFileSize)
@@ -1256,26 +1322,19 @@ namespace Showlist2026.Services
                     showFolderName = dirsplit[dirsplit.Length - 2].ToLower();
                 }
 
-                if (!foundShowFolder.Contains(showFolderName))
-                {
-                    foundShowFolder.Add(showFolderName);
-                }
+                foundShowFolder.Add(showFolderName);
 
                 bool updateTouchrecord = false;
-                var tf = _db.TouchFiles
-                    .FirstOrDefault(a => a.Name == fileinfo.Name);
-                if (tf is null)
+                if (!touchFilesByName.TryGetValue(fileinfo.Name, out var tf))
                 {
-                    tf = foundShowFiles.FirstOrDefault(a => a.Name == fileinfo.Name);
-                    if (tf is null)
+                    tf = new TouchFile
                     {
-                        tf = new TouchFile();
-                        tf.Name = fileinfo.Name;
-                        tf.FileDate = fileinfo.CreationTimeUtc;
-                        tf.WasRealFile = (fileinfo.Length > 200);
-                        updateTouchrecord = true;
-                        foundShowFiles.Add(tf);
-                    }
+                        Name = fileinfo.Name,
+                        FileDate = fileinfo.CreationTimeUtc,
+                        WasRealFile = (fileinfo.Length > 200)
+                    };
+                    updateTouchrecord = true;
+                    touchFilesByName[fileinfo.Name] = tf;
                 }
 
                 var tfprev = tf.WasRealFile;
@@ -1298,7 +1357,7 @@ namespace Showlist2026.Services
                         String seasondir = dirsplit.Last().ToLower();
 
                         var (matchedShow, matchedEpisode, directShow, parsed) =
-                            ResolveShowEpisode(showdir, fileinfo.Name, UserShows, FolderAliases);
+                            ResolveShowEpisode(showdir, fileinfo.Name, UserShows, FolderAliases, episodesByShow);
                         show = matchedShow;
                         episode = matchedEpisode;
 
@@ -1373,14 +1432,10 @@ namespace Showlist2026.Services
 
             foreach (var f in foundShowFolder)
             {
-                var tfolder = _db.TouchFolder
-                    .FirstOrDefault(a => a.Name == f);
-                if (tfolder is null)
+                // existingFolderNames.Add returns false when the folder is already recorded.
+                if (existingFolderNames.Add(f))
                 {
-                    tfolder = new TouchFolder();
-                    tfolder.Name = f;
-                    tfolder.FileDate = DateTime.UtcNow;
-                    _db.Add(tfolder);
+                    _db.Add(new TouchFolder { Name = f, FileDate = DateTime.UtcNow });
                 }
             }
 
@@ -1399,10 +1454,12 @@ namespace Showlist2026.Services
             if (!Directory.Exists(directory))
                 throw new DirectoryNotFoundException($"Directory not found: {directory}");
 
-            List<string> foundShowFolder = new List<string>(600000);
-            List<TouchFile> foundShowFiles = new(600000);
-            var UserShows = _db.Shows.Where(s => s.Wanted == true).ToList();
+            var foundShowFolder = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var UserShows = _db.Shows.Where(s => s.Wanted == true).AsNoTracking().ToList();
             var FolderAliases = _db.ShowFolderAliases.Include(a => a.Show).ToList();
+            var episodesByShow = BuildEpisodeLookup(RelevantShowIds(UserShows, FolderAliases));
+            var touchFilesByName = LoadTouchFilesByName();
+            var existingFolderNames = LoadTouchFolderNames();
 
             var filesToScan = await Dirlist(directory.Trim(), -1, "*.*", 0);
 
@@ -1422,26 +1479,19 @@ namespace Showlist2026.Services
                     showFolderName = dirsplit[dirsplit.Length - 2].ToLower();
                 }
 
-                if (!foundShowFolder.Contains(showFolderName))
-                {
-                    foundShowFolder.Add(showFolderName);
-                }
+                foundShowFolder.Add(showFolderName);
 
                 bool updateTouchrecord = false;
-                var tf = _db.TouchFiles
-                    .FirstOrDefault(a => a.Name == fileinfo.Name);
-                if (tf is null)
+                if (!touchFilesByName.TryGetValue(fileinfo.Name, out var tf))
                 {
-                    tf = foundShowFiles.FirstOrDefault(a => a.Name == fileinfo.Name);
-                    if (tf is null)
+                    tf = new TouchFile
                     {
-                        tf = new TouchFile();
-                        tf.Name = fileinfo.Name;
-                        tf.FileDate = fileinfo.CreationTimeUtc;
-                        tf.WasRealFile = (fileinfo.Length > 200);
-                        updateTouchrecord = true;
-                        foundShowFiles.Add(tf);
-                    }
+                        Name = fileinfo.Name,
+                        FileDate = fileinfo.CreationTimeUtc,
+                        WasRealFile = (fileinfo.Length > 200)
+                    };
+                    updateTouchrecord = true;
+                    touchFilesByName[fileinfo.Name] = tf;
                 }
 
                 var tfprev = tf.WasRealFile;
@@ -1463,7 +1513,7 @@ namespace Showlist2026.Services
                         String seasondir = dirsplit.Last().ToLower();
 
                         var (matchedShow, matchedEpisode, _, _) =
-                            ResolveShowEpisode(showdir, fileinfo.Name, UserShows, FolderAliases);
+                            ResolveShowEpisode(showdir, fileinfo.Name, UserShows, FolderAliases, episodesByShow);
                         show = matchedShow;
                         episode = matchedEpisode;
 
@@ -1520,14 +1570,9 @@ namespace Showlist2026.Services
 
             foreach (var f in foundShowFolder)
             {
-                var tfolder = _db.TouchFolder
-                    .FirstOrDefault(a => a.Name == f);
-                if (tfolder is null)
+                if (existingFolderNames.Add(f))
                 {
-                    tfolder = new TouchFolder();
-                    tfolder.Name = f;
-                    tfolder.FileDate = DateTime.UtcNow;
-                    _db.Add(tfolder);
+                    _db.Add(new TouchFolder { Name = f, FileDate = DateTime.UtcNow });
                 }
             }
 
@@ -1538,20 +1583,11 @@ namespace Showlist2026.Services
 
         public async Task<bool> RecheckTouchFiles()
         {
-            List<string> foundShowFolder = new List<string>(600000);
-            List<TouchFile> foundShowFiles = new(600000);
-            var UserShows = _db.Shows.Where(s => s.Wanted == true).ToList();
-
-            var filesToScan = _db.TouchFiles
-                .Include(s => s.Episode)
-                .Where(a => a.FileDate > DateTime.Now.AddDays(-365))
-                .ToList()
-                .Where(a => a.Episode is null);
-
-            foreach (var f in filesToScan)
-            {
-            }
-
+            // NOTE: Re-linking of orphaned TouchFiles to episodes is not yet implemented.
+            // Previously this method scanned unlinked touch files but the loop body was empty
+            // (a no-op). Left as an explicit no-op until the re-link logic is written, rather
+            // than silently iterating and doing nothing.
+            await Task.CompletedTask;
             return true;
         }
 
@@ -1565,6 +1601,10 @@ namespace Showlist2026.Services
                 t1 =
                     timezonelist.FirstOrDefault(a => a.timezone == "Unknown");
             }
+
+            // Never return null: callers dereference .timezone / assign to nav props.
+            // Fall back to any known timezone, or a synthetic "Unknown" as a last resort.
+            t1 ??= timezonelist.FirstOrDefault() ?? new Timezone { timezone = "Unknown", countrycode = "??" };
             return t1;
         }
 
