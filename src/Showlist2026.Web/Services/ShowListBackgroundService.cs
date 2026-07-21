@@ -1610,30 +1610,32 @@ namespace Showlist2026.Services
 
                     foreach (var alias in aliases)
                     {
-                        var realFolderName = alias.Show!.FolderName ?? alias.Show.DefaultFolderName;
-                        if (string.IsNullOrEmpty(realFolderName)) continue;
-
-                        var aliasPath = Path.Combine(rootPath, alias.AliasName);
-                        if (!Directory.Exists(aliasPath)) continue;
-
-                        var realPath = Path.Combine(rootPath, realFolderName);
-
-                        _logger.LogInformation("ResolveAliasFolders: Found alias folder '{Alias}' -> '{Real}' in {Dir}",
-                            alias.AliasName, realFolderName, tvDir.Name);
-
-                        if (!Directory.Exists(realPath))
+                        try
                         {
-                            // Simple rename — target doesn't exist
-                            Directory.Move(aliasPath, realPath);
-                            _logger.LogInformation("ResolveAliasFolders: Renamed '{Alias}' to '{Real}'",
-                                aliasPath, realPath);
-                        }
-                        else
-                        {
-                            // Merge: move all sub-folders/files from alias into real folder
-                            MergeDirectory(aliasPath, realPath);
+                            var realFolderName = alias.Show!.FolderName ?? alias.Show.DefaultFolderName;
+                            if (string.IsNullOrEmpty(realFolderName)) continue;
+
+                            var aliasPath = Path.Combine(rootPath, alias.AliasName);
+                            if (!Directory.Exists(aliasPath)) continue;
+
+                            var realPath = Path.Combine(rootPath, realFolderName);
+
+                            _logger.LogInformation("ResolveAliasFolders: Found alias folder '{Alias}' -> '{Real}' (season offset {Offset}) in {Dir}",
+                                alias.AliasName, realFolderName, alias.SeasonOffset, tvDir.Name);
+
+                            // Always merge (even when the real folder doesn't exist yet) so the
+                            // season offset gets applied consistently to "Season N" sub-folders.
+                            Directory.CreateDirectory(realPath);
+                            MergeDirectory(aliasPath, realPath, alias.SeasonOffset);
                             _logger.LogInformation("ResolveAliasFolders: Merged '{Alias}' into '{Real}'",
                                 aliasPath, realPath);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Don't let one bad alias (locked file, cross-volume move, permission error, etc.)
+                            // block every other alias from being processed this run.
+                            _logger.LogError(ex, "ResolveAliasFolders: Failed to resolve alias '{Alias}' in {Dir}",
+                                alias.AliasName, tvDir.Name);
                         }
                     }
                 }
@@ -1647,10 +1649,15 @@ namespace Showlist2026.Services
             }
         }
 
+        private static readonly Regex SeasonFolderRegex = new(@"^(?<prefix>[Ss]eason)\s*(?<num>\d+)$");
+
         /// <summary>
         /// Recursively moves all contents from source into destination, then removes the empty source directory.
+        /// When <paramref name="seasonOffset"/> is non-zero, "Season N" sub-folders directly under
+        /// <paramref name="source"/> are renamed to "Season {N - seasonOffset}" to match the real show's
+        /// season numbering (showSeason = fileSeason - SeasonOffset, see <see cref="ShowFolderAlias.SeasonOffset"/>).
         /// </summary>
-        private void MergeDirectory(string source, string destination)
+        private void MergeDirectory(string source, string destination, int seasonOffset = 0)
         {
             // Move files
             foreach (var file in Directory.GetFiles(source))
@@ -1670,7 +1677,25 @@ namespace Showlist2026.Services
             foreach (var dir in Directory.GetDirectories(source))
             {
                 var dirName = Path.GetFileName(dir);
-                var destDir = Path.Combine(destination, dirName);
+                var destDirName = dirName;
+
+                if (seasonOffset != 0)
+                {
+                    var match = SeasonFolderRegex.Match(dirName);
+                    if (match.Success && int.TryParse(match.Groups["num"].Value, out var seasonNum))
+                    {
+                        var mappedSeason = seasonNum - seasonOffset;
+                        if (mappedSeason < 1)
+                        {
+                            _logger.LogWarning("ResolveAliasFolders: Skipping '{Dir}', season offset {Offset} produces invalid season {Mapped}",
+                                dir, seasonOffset, mappedSeason);
+                            continue;
+                        }
+                        destDirName = $"{match.Groups["prefix"].Value} {mappedSeason}";
+                    }
+                }
+
+                var destDir = Path.Combine(destination, destDirName);
 
                 if (!Directory.Exists(destDir))
                 {
@@ -1678,7 +1703,7 @@ namespace Showlist2026.Services
                 }
                 else
                 {
-                    // Recursively merge sub-directory contents
+                    // Recursively merge sub-directory contents (offset already applied at this level)
                     MergeDirectory(dir, destDir);
                 }
             }
