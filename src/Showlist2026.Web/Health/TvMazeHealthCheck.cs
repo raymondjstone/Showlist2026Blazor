@@ -21,17 +21,22 @@ namespace Showlist2026.Web.Health
         {
             try
             {
-                var response = await $"{_options.TvMazeBaseUrl}/shows/1"
+                // Any 2xx reaches here without throwing; a non-2xx status throws
+                // FlurlHttpException below instead (Flurl's default behavior), which is why the
+                // 429/other-status handling lives in the catch clauses, not as response checks.
+                await $"{_options.TvMazeBaseUrl}/shows/1"
                     .WithTimeout(10)
                     .GetAsync(cancellationToken: cancellationToken);
 
-                if (response.StatusCode == 200)
-                    return HealthCheckResult.Healthy("TVMaze API is reachable");
-
-                if (response.StatusCode == 429)
-                    return HealthCheckResult.Degraded("TVMaze API is rate-limiting");
-
-                return HealthCheckResult.Unhealthy($"TVMaze API returned status {response.StatusCode}");
+                return HealthCheckResult.Healthy("TVMaze API is reachable");
+            }
+            catch (FlurlHttpException ex) when (ex.StatusCode == 429)
+            {
+                return HealthCheckResult.Degraded("TVMaze API is rate-limiting", ex);
+            }
+            catch (FlurlHttpException ex)
+            {
+                return HealthCheckResult.Unhealthy($"TVMaze API returned status {ex.StatusCode}", ex);
             }
             catch (Exception ex)
             {

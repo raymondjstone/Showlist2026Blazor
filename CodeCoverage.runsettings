@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- File name extension must be .runsettings -->
+<!--
+  Configures Visual Studio's built-in Code Coverage collector (Test > Analyze Code Coverage
+  for All Tests). This is a SEPARATE engine from coverlet (used by plain "dotnet test", see
+  the PropertyGroup in Showlist2026.Tests.csproj) with its own configuration format and its
+  own exclusion rules - the coverlet MSBuild properties do nothing here, and this file does
+  nothing for coverlet. Both need to exclude EF Core migrations to give an honest number,
+  since they are configured independently.
+
+  Visual Studio 2019 16.4+ auto-detects a single .runsettings file at the solution root, so
+  this applies automatically without going through Test, Configure Run Settings.
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="Code Coverage" uri="datacollector://Microsoft/CodeCoverage/2.0">
+        <Configuration>
+          <CodeCoverage>
+            <!-- Match the path of the source files in which each method is defined. -->
+            <Sources>
+              <Exclude>
+                <!-- EF Core scaffolded DDL/T-SQL: only exercised by Database.Migrate() against
+                     a real SQL Server, nothing to unit test here. -->
+                <Source>.*[\\/]Migrations[\\/].*</Source>
+              </Exclude>
+            </Sources>
+
+            <!-- Match attributes on any code element. -->
+            <Attributes>
+              <Exclude>
+                <Attribute>^System\.Diagnostics\.DebuggerNonUserCodeAttribute$</Attribute>
+                <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
+                <Attribute>^System\.Diagnostics\.CodeAnalysis\.ExcludeFromCodeCoverageAttribute$</Attribute>
+              </Exclude>
+            </Attributes>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

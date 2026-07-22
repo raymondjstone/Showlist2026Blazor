@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Config for the Fine Code Coverage Visual Studio extension (the coverage icon in Test
+  Explorer) - a THIRD, separate coverage engine from the other two configured in this repo:
+    - Showlist2026.Tests.csproj (coverlet, used by plain "dotnet test")
+    - CodeCoverage.runsettings (Microsoft's native collector, used by VS Enterprise's
+      Test > Analyze Code Coverage for All Tests)
+  None of the three read each other's settings, so Migrations has to be excluded three times,
+  once per engine. FCC is found by walking up the directory tree from each project, so this
+  one file at the repo root covers all projects.
+-->
+<FineCodeCoverage>
+  <Enabled>True</Enabled>
+  <ExcludeByFile>
+    **/Migrations/*
+  </ExcludeByFile>
+</FineCodeCoverage>

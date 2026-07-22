@@ -6,3 +6,6 @@ obj/
 appsettings.Development.json
 setup-secrets.bat
 .env
+TestResults/
+coverage-raw/
+coverage.cobertura.xml

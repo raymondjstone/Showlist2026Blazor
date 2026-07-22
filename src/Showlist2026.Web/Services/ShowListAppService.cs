@@ -243,7 +243,8 @@ namespace Showlist2026.Services
             DateTimeOffset min = DateTimeOffset.UtcNow.AddDays(daysminus);
             DateTimeOffset max = DateTimeOffset.UtcNow.AddDays(daysplus);
 
-            _db.Database.SetCommandTimeout(120);
+            if (_db.Database.IsRelational())
+                _db.Database.SetCommandTimeout(120);
 
             // Load all user filter selections first (small datasets, fast queries)
             var showFilters = _db.Shows.Where(s => s.Wanted != null)
@@ -820,10 +821,13 @@ namespace Showlist2026.Services
             DateTimeOffset min = DateTimeOffset.UtcNow.AddDays(daysminus);
             DateTimeOffset max = DateTimeOffset.UtcNow.AddDays(daysplus);
 
-            string yeara = "/" + min.Year.ToString();
-            string yearb = "/" + max.Year.ToString();
+            // premiered is stored ISO-formatted ("yyyy-MM-dd"), so match on a leading year rather
+            // than the "/yyyy" substring this used to look for (which real TVMaze dates never
+            // contain, silently making this pre-filter match nothing).
+            string yeara = min.Year.ToString();
+            string yearb = max.Year.ToString();
 
-            var eps1 = _db.Shows.Where(a => a.premiered.Contains(yeara) || a.premiered.Contains(yearb)).ToList();
+            var eps1 = _db.Shows.Where(a => a.premiered != null && (a.premiered.StartsWith(yeara) || a.premiered.StartsWith(yearb))).ToList();
 
             var eps = eps1.Where(a => a.ShowStart >= min && a.ShowStart <= max).ToList();
 
@@ -1189,7 +1193,8 @@ namespace Showlist2026.Services
         {
             using var _db = _dbFactory.CreateDbContext();
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            _db.Database.SetCommandTimeout(120);
+            if (_db.Database.IsRelational())
+                _db.Database.SetCommandTimeout(120);
 
             // 1. Get wanted show IDs (Wanted = true)
             var wantedShowIds = _db.Shows
@@ -1947,13 +1952,14 @@ namespace Showlist2026.Services
         public List<Show> FindDuplicateShows()
         {
             using var _db = _dbFactory.CreateDbContext();
-            var dupeShowIds = _db.Shows
+            var dupeTvMazeIds = _db.Shows
                 .GroupBy(s => s.showid)
-                .Where(g => g.Count() > 1)
-                .SelectMany(g => g.Select(s => s.Id))
+                .Select(g => new { ShowId = g.Key, Count = g.Count() })
+                .Where(x => x.Count > 1)
+                .Select(x => x.ShowId)
                 .ToList();
 
-            return _db.Shows.Where(s => dupeShowIds.Contains(s.Id))
+            return _db.Shows.Where(s => dupeTvMazeIds.Contains(s.showid))
                 .OrderBy(s => s.showid).ThenBy(s => s.Id)
                 .ToList();
         }
@@ -2722,9 +2728,22 @@ namespace Showlist2026.Services
         }
 
         /// <summary>
+        /// Redacts the first match of <paramref name="keyPattern"/> in <paramref name="url"/>
+        /// (e.g. an "apikey=..." or "r=..." query param) with <paramref name="replacement"/>.
+        /// Returns the URL unchanged if the pattern isn't found, since String.Replace throws
+        /// ArgumentException when given an empty oldValue (Regex.Match(...).Value when there's
+        /// no match) rather than being a no-op.
+        /// </summary>
+        private static string RedactUrlParam(string url, string keyPattern, string replacement)
+        {
+            var match = Regex.Match(url, keyPattern);
+            return match.Success ? url.Replace(match.Value, replacement) : url;
+        }
+
+        /// <summary>
         /// Parse Newznab API XML response.
         /// </summary>
-        private List<NzbSiteCrawlResult> ParseNewznabResponse(
+        internal List<NzbSiteCrawlResult> ParseNewznabResponse(
             string xml,
             string siteName,
             string searchUrl,
@@ -2811,7 +2830,7 @@ namespace Showlist2026.Services
                         DownloadUrl = link,
                         Size = size,
                         PostDate = DateTime.TryParse(pubDate, out var dt) ? dt : null,
-                        SearchUrl = searchUrl.Replace(Regex.Match(searchUrl, @"apikey=[^&]+").Value, "apikey=[HIDDEN]")
+                        SearchUrl = RedactUrlParam(searchUrl, @"apikey=[^&]+", "apikey=[HIDDEN]")
                     });
                 }
             }
@@ -2823,7 +2842,7 @@ namespace Showlist2026.Services
             return results;
         }
 
-        private (List<NzbSiteCrawlResult> results, List<string> debugInfo) ParseNzbSiteHtml(string html, string siteName, string searchUrl, List<Episode> unwatchedEpisodes)
+        internal (List<NzbSiteCrawlResult> results, List<string> debugInfo) ParseNzbSiteHtml(string html, string siteName, string searchUrl, List<Episode> unwatchedEpisodes)
         {
             var results = new List<NzbSiteCrawlResult>();
             var debugInfo = new List<string>();
@@ -3307,7 +3326,7 @@ namespace Showlist2026.Services
         /// <summary>
         /// Parse RSS feed XML response. Similar to ParseNewznabResponse but handles RSS-specific format.
         /// </summary>
-        private List<NzbSiteCrawlResult> ParseRssFeedResponse(
+        internal List<NzbSiteCrawlResult> ParseRssFeedResponse(
             string xml,
             string siteName,
             string feedUrl,
@@ -3413,7 +3432,7 @@ namespace Showlist2026.Services
                         DownloadUrl = link,
                         Size = size,
                         PostDate = DateTime.TryParse(pubDate, out var dt) ? dt : null,
-                        SearchUrl = feedUrl.Replace(Regex.Match(feedUrl, @"r=[^&]+").Value, "r=[HIDDEN]")
+                        SearchUrl = RedactUrlParam(feedUrl, @"r=[^&]+", "r=[HIDDEN]")
                     });
                 }
             }

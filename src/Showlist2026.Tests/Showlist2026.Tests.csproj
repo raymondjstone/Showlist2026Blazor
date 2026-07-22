@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <NoWarn>CS8632;CS8669</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Coverage is collected on every plain `dotnet test` (from this project or the solution) -
+    no extra collect or settings flags needed. Uses coverlet.msbuild (not coverlet.collector,
+    which only applies exclusions when explicitly pointed at coverlet.runsettings via a
+    settings flag - easy to forget, and the reason unfiltered runs previously showed
+    misleadingly low numbers for Data/Web).
+
+    Only EF Core migrations are excluded: scaffolded T-SQL/DDL that Database.Migrate() runs
+    against a real SQL Server - there's no meaningful way to unit test generated schema
+    scripts without one. Everything else that used to be excluded here (TVMaze/NZBPlanet DTOs,
+    Blazor UI) either already has real tests or is being worked on rather than hidden from the
+    number - see NOTES.md in this project for the current state of each gap.
+  -->
+  <PropertyGroup>
+    <CollectCoverage>true</CollectCoverage>
+    <CoverletOutputFormat>cobertura</CoverletOutputFormat>
+    <Exclude>[Showlist2026.Data]Showlist2026.Data.Migrations.*</Exclude>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.6" />
+    <PackageReference Include="bunit" Version="2.6.2" />
+    <!-- Pin past the vulnerable transitive AngleSharp version bUnit brings in (GHSA-pgww-w46g-26qg). -->
+    <PackageReference Include="AngleSharp" Version="1.5.1" />
+    <PackageReference Include="coverlet.msbuild" Version="6.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Showlist2026.Core\Showlist2026.Core.csproj" />
+    <ProjectReference Include="..\Showlist2026.Data\Showlist2026.Data.csproj" />
+    <ProjectReference Include="..\Showlist2026.Web\Showlist2026.Web.csproj" />
+  </ItemGroup>
+
+</Project>

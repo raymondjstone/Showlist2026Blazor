@@ -5,6 +5,13 @@
     <ProjectReference Include="..\Showlist2026.Data\Showlist2026.Data.csproj" />
   </ItemGroup>
 
+  <!-- Lets the test project unit-test the internal NZB response parsers directly. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Showlist2026.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Altairis.Pushover.Client" Version="1.0.0" />
     <PackageReference Include="AspNetCore.HealthChecks.SqlServer" Version="8.*" />
