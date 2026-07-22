@@ -145,6 +145,38 @@ public class ShowDetailPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void SettingFolderName_OpensModalAndPersistsThroughRealService()
+    {
+        var showId = SeedShowWithEpisodes();
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-primary.btn-sm").Click(); // "Set Folder Name"
+
+        Assert.Contains("Save Folder Name", cut.Markup);
+
+        cut.Find(".modal-body input.form-control").Change(@"Breaking Bad [2008]");
+        cut.Find("button.btn-primary:not(.btn-sm)").Click(); // "Save" in modal footer
+
+        using var verify = Db.CreateContext();
+        Assert.Equal(@"Breaking Bad [2008]", verify.Shows.Find(showId)!.FolderName);
+        Assert.DoesNotContain("Save Folder Name", cut.Markup);
+    }
+
+    [Fact]
+    public void CancellingFolderNameModal_ClosesWithoutSaving()
+    {
+        var showId = SeedShowWithEpisodes();
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-primary.btn-sm").Click(); // "Set Folder Name"
+        cut.Find("button.btn-secondary").Click(); // "Cancel" in modal footer
+
+        Assert.DoesNotContain("Save Folder Name", cut.Markup);
+        using var verify = Db.CreateContext();
+        Assert.Null(verify.Shows.Find(showId)!.FolderName);
+    }
+
+    [Fact]
     public void MarkingEpisodeWatchedFromSeasonTab_PersistsThroughRealService()
     {
         var showId = SeedShowWithEpisodes();
