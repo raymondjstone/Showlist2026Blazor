@@ -104,6 +104,69 @@ public class ShowListAppServiceStatsSearchTests
     }
 
     [Fact]
+    public void AdvancedSearch_FiltersByNetworkWebNetworkLanguageCountryYearStatusTypeAndGenre()
+    {
+        using var db = new TestDb();
+        int networkId, webNetworkId, languageId, countryId, typeId, genreId;
+        using (var ctx = db.CreateContext())
+        {
+            var country = TestData.NewCountry("US");
+            var network = TestData.NewNetwork("AMC", country: country);
+            var webNetwork = TestData.NewWebNetwork("Netflix");
+            var language = TestData.NewLanguage("English");
+            var type = TestData.NewType("Scripted");
+            var genre = TestData.NewGenreText("Drama");
+
+            var byNetwork = TestData.NewShow("By Network", network: network);
+            var byWebNetwork = TestData.NewShow("By WebNetwork", webNetwork: webNetwork);
+            var byLanguage = TestData.NewShow("By Language", language: language);
+            var byYear = TestData.NewShow("By Year", premiered: "2019-05-01");
+            var byStatus = TestData.NewShow("By Status", status: "Ended");
+            var byType = TestData.NewShow("By Type", type: type);
+            var byGenre = TestData.NewShow("By Genre");
+            byGenre.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genre, show = byGenre } };
+            var nonMatching = TestData.NewShow("Non Matching");
+
+            ctx.Countrys.Add(country);
+            ctx.Shows.AddRange(byNetwork, byWebNetwork, byLanguage, byYear, byStatus, byType, byGenre, nonMatching);
+            ctx.SaveChanges();
+
+            networkId = network.Id;
+            webNetworkId = webNetwork.Id;
+            languageId = language.Id;
+            countryId = country.Id;
+            typeId = type.Id;
+            genreId = genre.Id;
+        }
+
+        var service = TestFactory.CreateAppService(db);
+
+        var (byNet, _) = service.AdvancedSearch(null, null, networkId, null);
+        Assert.Equal("By Network", Assert.Single(byNet).name);
+
+        var (byWeb, _) = service.AdvancedSearch(null, null, null, null, webNetworkId: webNetworkId);
+        Assert.Equal("By WebNetwork", Assert.Single(byWeb).name);
+
+        var (byLang, _) = service.AdvancedSearch(null, null, null, null, languageId: languageId);
+        Assert.Equal("By Language", Assert.Single(byLang).name);
+
+        var (byCountry, _) = service.AdvancedSearch(null, null, null, null, countryId: countryId);
+        Assert.Equal("By Network", Assert.Single(byCountry).name);
+
+        var (byYearResult, _) = service.AdvancedSearch(null, null, null, year: 2019);
+        Assert.Equal("By Year", Assert.Single(byYearResult).name);
+
+        var (byStatusResult, _) = service.AdvancedSearch(null, null, null, null, status: "Ended");
+        Assert.Equal("By Status", Assert.Single(byStatusResult).name);
+
+        var (byTypeResult, _) = service.AdvancedSearch(null, null, null, null, typeId: typeId);
+        Assert.Equal("By Type", Assert.Single(byTypeResult).name);
+
+        var (byGenreResult, _) = service.AdvancedSearch(null, genreId, null, null);
+        Assert.Equal("By Genre", Assert.Single(byGenreResult).name);
+    }
+
+    [Fact]
     public void GetSimilarShows_RanksByGenreOverlap_AndExcludesDecidedShows()
     {
         using var db = new TestDb();

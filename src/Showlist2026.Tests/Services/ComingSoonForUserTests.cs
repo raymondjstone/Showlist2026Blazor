@@ -49,4 +49,52 @@ public class ComingSoonForUserTests
         Assert.DoesNotContain(results, r => r.ep.name == "Excluded");
         Assert.DoesNotContain(results, r => r.ep.name == "Outside Window");
     }
+
+    [Fact]
+    public void ComingSoonForUser_ExcludesShowsDecidedThroughEachFilterDimension()
+    {
+        using var db = new TestDb();
+        var premieredStr = DateTime.UtcNow.AddDays(30).ToString("yyyy-MM-dd");
+        using (var ctx = db.CreateContext())
+        {
+            var excludedType = TestData.NewType("Talk Show", wanted: false);
+            var byType = TestData.NewShow("Excluded By Type", premiered: premieredStr, type: excludedType);
+
+            var excludedNetwork = TestData.NewNetwork("Bad Network", wanted: false);
+            var byNetwork = TestData.NewShow("Excluded By Network", premiered: premieredStr, network: excludedNetwork);
+
+            var excludedWebNetwork = TestData.NewWebNetwork("Bad Web Network", wanted: false);
+            var byWebNetwork = TestData.NewShow("Excluded By WebNetwork", premiered: premieredStr, webNetwork: excludedWebNetwork);
+
+            var excludedLanguage = TestData.NewLanguage("Klingon", wanted: false);
+            var byLanguage = TestData.NewShow("Excluded By Language", premiered: premieredStr, language: excludedLanguage);
+
+            var excludedCountry = new Showlist2026.Entities.Country { code = "XX", name = "Excluded Land", Wanted = false };
+            var byCountry = TestData.NewShow("Excluded By Country", premiered: premieredStr,
+                network: TestData.NewNetwork("Some Network", country: excludedCountry));
+
+            var excludedGenre = TestData.NewGenreText("Reality", wanted: false);
+            var byGenre = TestData.NewShow("Excluded By Genre", premiered: premieredStr);
+            byGenre.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = excludedGenre, show = byGenre } };
+
+            var explicitlyWanted = TestData.NewShow("Explicitly Wanted", premiered: premieredStr, wanted: true);
+
+            var undecided = TestData.NewShow("Still Undecided", premiered: premieredStr);
+
+            ctx.Shows.AddRange(byType, byNetwork, byWebNetwork, byLanguage, byCountry, byGenre, explicitlyWanted, undecided);
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var results = service.ComingSoonForUser();
+
+        Assert.DoesNotContain(results, r => r.ep.name == "Excluded By Type");
+        Assert.DoesNotContain(results, r => r.ep.name == "Excluded By Network");
+        Assert.DoesNotContain(results, r => r.ep.name == "Excluded By WebNetwork");
+        Assert.DoesNotContain(results, r => r.ep.name == "Excluded By Language");
+        Assert.DoesNotContain(results, r => r.ep.name == "Excluded By Country");
+        Assert.DoesNotContain(results, r => r.ep.name == "Excluded By Genre");
+        Assert.DoesNotContain(results, r => r.ep.name == "Explicitly Wanted");
+        Assert.Contains(results, r => r.ep.name == "Still Undecided");
+    }
 }

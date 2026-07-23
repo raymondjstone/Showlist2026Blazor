@@ -186,4 +186,34 @@ public class ShowListAppServiceFileSystemTests : IDisposable
         Assert.Equal(2000, duplicates[0].FileSize);
         Assert.Equal(1000, duplicates[1].FileSize);
     }
+
+    [Fact]
+    public async Task Dirlist_FiltersByAgeAndSize_AndOrdersNewestFirst()
+    {
+        using var db = new TestDb();
+
+        var oldFile = Path.Combine(_tempRoot, "old.mkv");
+        var tooSmallFile = Path.Combine(_tempRoot, "small.mkv");
+        var newerFile = Path.Combine(_tempRoot, "newer.mkv");
+        var olderMatchFile = Path.Combine(_tempRoot, "older_match.mkv");
+
+        File.WriteAllBytes(oldFile, new byte[100_000]);
+        File.SetLastWriteTime(oldFile, DateTime.Now.AddDays(-30));
+
+        File.WriteAllBytes(tooSmallFile, new byte[10]);
+        File.SetLastWriteTime(tooSmallFile, DateTime.Now);
+
+        File.WriteAllBytes(newerFile, new byte[100_000]);
+        File.SetLastWriteTime(newerFile, DateTime.Now);
+
+        File.WriteAllBytes(olderMatchFile, new byte[100_000]);
+        File.SetLastWriteTime(olderMatchFile, DateTime.Now.AddDays(-1));
+
+        var service = TestFactory.CreateAppService(db);
+        var results = await service.Dirlist(_tempRoot, daysOldToAllow: 5, minSizeAllowed: 50_000);
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal("newer.mkv", results[0].Name); // newest first
+        Assert.Equal("older_match.mkv", results[1].Name);
+    }
 }
