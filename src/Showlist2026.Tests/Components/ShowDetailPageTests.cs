@@ -210,6 +210,69 @@ public class ShowDetailPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void MarkingWholeSeasonWatched_PersistsThroughRealService()
+    {
+        var showId = SeedShowWithEpisodes();
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("#seasonTabContent i.fa-tasks").Click();
+
+        using var verify = Db.CreateContext();
+        Assert.All(verify.Episodes.Where(e => e.show!.Id == showId), e => Assert.True(e.Watched));
+    }
+
+    [Fact]
+    public void ClickingTypeLanguageNetworkWebNetworkAndCountryFilters_PersistThroughRealService()
+    {
+        int typeId, languageId, networkId, webNetworkId, networkCountryId;
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var type = TestData.NewType("Scripted");
+            var language = TestData.NewLanguage("English");
+            var country = TestData.NewCountry("US");
+            var network = TestData.NewNetwork("AMC", country: country);
+            var webNetwork = TestData.NewWebNetwork("Netflix");
+            var show = TestData.NewShow("Full Show", wanted: true,
+                type: type, language: language, network: network, webNetwork: webNetwork);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+            typeId = type.Id;
+            languageId = language.Id;
+            networkId = network.Id;
+            webNetworkId = webNetwork.Id;
+            networkCountryId = country.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("i[title='Select type']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Types.Find(typeId)!.Wanted);
+
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("i[title='Select language']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Languages.Find(languageId)!.Wanted);
+
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("i[title='Select network']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Networks.Find(networkId)!.Wanted);
+
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("i[title='Select country']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Countrys.Find(networkCountryId)!.Wanted);
+
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("i[title='Select webnetwork']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.WebNetworks.Find(webNetworkId)!.Wanted);
+    }
+
+    [Fact]
     public void RendersTypeLanguageNetworkWebNetworkCountriesAndSummary()
     {
         int showId;
