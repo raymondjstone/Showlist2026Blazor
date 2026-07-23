@@ -1,4 +1,5 @@
 using Flurl.Http.Testing;
+using Microsoft.EntityFrameworkCore;
 using Showlist2026.Tests.TestInfrastructure;
 using Xunit;
 
@@ -286,5 +287,34 @@ public class ShowListBackgroundServiceHttpTests
 
         Assert.True(await service.BacklogPage());
         httpTest.ShouldHaveCalled("*/shows?page=3");
+    }
+
+    [Fact]
+    public async Task RefreshNetworks_CreatesNetworkAndCountry_FromTvMazeResponse()
+    {
+        // RefreshNetworks always scans network IDs 1..1800 (there's no per-DB lower bound). Only
+        // ID 1 resolves to a network here (everything else 404s and is swallowed) - nlist is
+        // loaded once before the loop and never refreshed, so if more than one ID resolved to the
+        // same network here, each would be re-added as a duplicate (a real, separate bug from
+        // what this test is targeting).
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(status: 404);
+        httpTest.ForCallsTo("*/networks/1").RespondWithJson(new
+        {
+            id = 42,
+            name = "AMC",
+            country = new { name = "United States", code = "US", timezone = "America/New_York" }
+        });
+
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        Assert.True(await service.RefreshNetworks());
+
+        using var verify = db.CreateContext();
+        var network = Assert.Single(verify.Networks.Include(n => n.country), n => n.networkid == 42);
+        Assert.Equal("AMC", network.name);
+        Assert.Equal("US", network.country!.code);
     }
 }
