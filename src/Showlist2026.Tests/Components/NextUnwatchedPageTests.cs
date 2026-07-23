@@ -82,4 +82,81 @@ public class NextUnwatchedPageTests : BlazorTestBase
 
         Assert.Contains("Next Unwatched Episode Per Show (0 shows)", cut.Markup);
     }
+
+    [Fact]
+    public void RendersProgressBarLanguageNetworkStatusAndPriorityBadges()
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true,
+                network: TestData.NewNetwork("AMC"),
+                webNetwork: TestData.NewWebNetwork("Netflix"),
+                language: TestData.NewLanguage("English"),
+                status: "Running");
+            show.Priority = 3; // High
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-10), watched: true);
+            TestData.NewEpisode(show, 1, 2, DateTimeOffset.UtcNow.AddDays(-9)); // next unwatched
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<NextUnwatched>();
+
+        Assert.Contains("English", cut.Markup);
+        Assert.Contains("AMC", cut.Markup);
+        Assert.Contains("Netflix", cut.Markup);
+        Assert.Contains("bg-success\">Running", cut.Markup);
+        Assert.Contains("bg-danger\">High", cut.Markup);
+        Assert.Contains("progress-bar", cut.Markup);
+        Assert.Contains("1/2", cut.Markup); // 1 watched of 2 aired
+    }
+
+    [Theory]
+    [InlineData("name")]
+    [InlineData("date")]
+    [InlineData("priority")]
+    public void ChangingSortOrder_ReloadsWithoutError(string sortValue)
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-9));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<NextUnwatched>();
+        cut.Find("select.form-select-sm").Change(sortValue);
+
+        Assert.Contains("My Show", cut.Markup);
+    }
+
+    [Fact]
+    public void SwitchingTabs_ShowsTheSelectedBehindBucket()
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var oneBehind = TestData.NewShow("One Behind Show", wanted: true);
+            TestData.NewEpisode(oneBehind, 1, 1, DateTimeOffset.UtcNow.AddDays(-9));
+
+            var manyBehind = TestData.NewShow("Many Behind Show", wanted: true);
+            for (int i = 1; i <= 3; i++)
+                TestData.NewEpisode(manyBehind, 1, i, DateTimeOffset.UtcNow.AddDays(-9 + i));
+
+            ctx.Shows.AddRange(oneBehind, manyBehind);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<NextUnwatched>();
+
+        // Tabs render in fixed bucket order (1 / 2-5 / 6-20 / 20+), not by count - "1 Behind" is
+        // first and therefore active by default.
+        Assert.Contains("One Behind Show", cut.Markup);
+        Assert.DoesNotContain("Many Behind Show", cut.Markup);
+
+        cut.FindAll("li.nav-item button").First(b => b.TextContent.Contains("2-5 Behind")).Click();
+
+        Assert.Contains("Many Behind Show", cut.Markup);
+        Assert.DoesNotContain("One Behind Show", cut.Markup);
+    }
 }
