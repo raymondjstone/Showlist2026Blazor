@@ -258,4 +258,83 @@ public class AdminPageTests : BlazorTestBase
         using var verify = Db.CreateContext();
         Assert.True(verify.Shows.Find(showId)!.Wanted);
     }
+
+    [Fact]
+    public void RefreshNetworks_Succeeds_ThroughRealBackgroundService()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(status: 404);
+        httpTest.ForCallsTo("*/networks/1").RespondWithJson(new
+        {
+            id = 42,
+            name = "AMC",
+            country = new { name = "United States", code = "US", timezone = "America/New_York" }
+        });
+
+        var cut = Render<Admin>();
+        cut.FindAll("button.btn-primary").First(b => b.TextContent.Contains("Refresh Networks")).Click();
+
+        Assert.Contains("Refresh Networks completed successfully", cut.Markup);
+        Assert.Contains("alert-success", cut.Markup);
+    }
+
+    [Fact]
+    public void RefreshShowBatch_Succeeds_ThroughRealBackgroundService()
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            ctx.Shows.Add(TestData.NewShow("Show", showid: 1));
+            ctx.SaveChanges();
+        }
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(System.Array.Empty<object>());
+
+        var cut = Render<Admin>();
+        cut.FindAll("button.btn-primary").First(b => b.TextContent.Contains("Refresh Show Batch")).Click();
+
+        Assert.Contains("Refresh Show Batch completed successfully", cut.Markup);
+        Assert.Contains("alert-success", cut.Markup);
+    }
+
+    [Fact]
+    public void RefreshShows_Succeeds_ThroughRealBackgroundService_WithNoShowsNeedingUpdate()
+    {
+        var cut = Render<Admin>();
+        cut.FindAll("button.btn-primary").First(b => b.TextContent.Contains("Refresh Shows")).Click();
+
+        Assert.Contains("Refresh Shows completed successfully", cut.Markup);
+        Assert.Contains("alert-success", cut.Markup);
+    }
+
+    [Fact]
+    public void RefreshShowPages_Succeeds_ThroughRealBackgroundService_WhenShowsExist()
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            ctx.Shows.Add(TestData.NewShow("Show", showid: 1));
+            ctx.SaveChanges();
+        }
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(System.Array.Empty<object>());
+
+        var cut = Render<Admin>();
+        cut.FindAll("button.btn-warning").First(b => b.TextContent.Contains("Refresh Show Pages")).Click();
+
+        Assert.Contains("Refresh Show Pages completed successfully", cut.Markup);
+        Assert.Contains("alert-success", cut.Markup);
+    }
+
+    [Fact]
+    public void ImportData_WithMalformedJson_ReportsFailure()
+    {
+        var cut = Render<Admin>();
+        var fileInput = cut.FindComponents<InputFile>()[0];
+        fileInput.UploadFiles(InputFileContent.CreateFromText("not valid json {{{", "export.json"));
+
+        var importButton = cut.FindAll("button.btn-outline-primary").First(b => b.TextContent.Contains("Import"));
+        importButton.Click();
+
+        Assert.Contains("Import failed", cut.Markup);
+        Assert.Contains("alert-danger", cut.Markup);
+    }
 }
