@@ -202,6 +202,7 @@ namespace Showlist2026.Services
                 var s = _db.Shows
                     .Where(a => a.Id == (int)id)
                     .Include(s => s.Types)
+                    .Include(s => s.Languages)
                     .Include(s => s.Genres)
                     .Include(s => s.WebNetworks)
                     .Include(s => s.Networks)

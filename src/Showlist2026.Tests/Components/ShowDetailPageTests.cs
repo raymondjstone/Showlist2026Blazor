@@ -109,6 +109,27 @@ public class ShowDetailPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void AliasSearchDropdown_ShowsMatchingShows_AndSelectingFillsInFolderName()
+    {
+        var showId = SeedShowWithEpisodes();
+        using (var ctx = Db.CreateContext())
+        {
+            var other = TestData.NewShow("Better Call Saul", folderName: "Better.Call.Saul");
+            ctx.Shows.Add(other);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-outline-secondary.btn-sm").Click(); // toggles "showAliasInput"
+
+        cut.Find("input[placeholder='Old show / folder name in files']").Input("Better");
+        cut.WaitForAssertion(() => Assert.Contains("Better Call Saul", cut.Markup));
+        cut.Find("div[style*='cursor: pointer']").Click(); // select search result
+
+        Assert.Equal("Better.Call.Saul", cut.Find("input[placeholder='Old show / folder name in files']").GetAttribute("value"));
+    }
+
+    [Fact]
     public void AddingAndRemovingShowLink_PersistsThroughRealService()
     {
         var showId = SeedShowWithEpisodes();
@@ -186,6 +207,35 @@ public class ShowDetailPageTests : BlazorTestBase
 
         using var verify = Db.CreateContext();
         Assert.Contains(verify.Episodes, e => e.Watched && e.number == 2);
+    }
+
+    [Fact]
+    public void RendersTypeLanguageNetworkWebNetworkCountriesAndSummary()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Full Show", wanted: true,
+                type: TestData.NewType("Scripted"),
+                language: TestData.NewLanguage("English"),
+                network: TestData.NewNetwork("AMC", country: TestData.NewCountry("US")),
+                webNetwork: TestData.NewWebNetwork("Netflix", country: TestData.NewCountry("GB")));
+            show.summary = "A gripping drama";
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+
+        Assert.Contains("Scripted", cut.Markup);
+        Assert.Contains("English", cut.Markup);
+        Assert.Contains("AMC", cut.Markup);
+        Assert.Contains("US)", cut.Markup);
+        Assert.Contains("Netflix", cut.Markup);
+        Assert.Contains("GB)", cut.Markup);
+        Assert.Contains("A gripping drama", cut.Markup);
     }
 
     [Fact]
@@ -270,7 +320,9 @@ public class ShowDetailPageTests : BlazorTestBase
             show.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genre, show = show } };
             TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
 
-            var similar = TestData.NewShow("Better Call Saul"); // undecided, so not excluded
+            var similar = TestData.NewShow("Better Call Saul", // undecided, so not excluded
+                network: TestData.NewNetwork("AMC"), status: "Running");
+            similar.imagemed = "http://img/similar.jpg";
             similar.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genre, show = similar } };
 
             ctx.Shows.Add(show);
@@ -283,6 +335,8 @@ public class ShowDetailPageTests : BlazorTestBase
 
         Assert.Contains("Similar Shows", cut.Markup);
         Assert.Contains("Better Call Saul", cut.Markup);
+        Assert.Contains("http://img/similar.jpg", cut.Markup);
+        Assert.Contains("bg-secondary\">Running", cut.Markup);
     }
 
     [Fact]
