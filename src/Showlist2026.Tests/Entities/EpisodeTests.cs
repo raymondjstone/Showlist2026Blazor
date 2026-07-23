@@ -135,4 +135,24 @@ public class EpisodeTests
         var ep = new Episode { show = show };
         Assert.Equal("", ep.maincountrycode);
     }
+
+    [Fact]
+    public void MainCountryCode_FallsThroughToWebNetwork_WhenNetworkHasNoCountry()
+    {
+        var show = new Show
+        {
+            Networks = new Network { country = null },
+            WebNetworks = new WebNetwork { country = new Country { code = "GB" } }
+        };
+        var ep = new Episode { show = show };
+        Assert.Equal("GB", ep.maincountrycode);
+    }
+
+    [Fact]
+    public void MainCountryCode_EmptyWhenWebNetworkPresentButHasNoCountry()
+    {
+        var show = new Show { WebNetworks = new WebNetwork { country = null } };
+        var ep = new Episode { show = show };
+        Assert.Equal("", ep.maincountrycode);
+    }
 }

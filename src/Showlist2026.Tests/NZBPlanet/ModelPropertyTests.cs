@@ -33,6 +33,16 @@ public class ModelPropertyTests
     }
 
     [Fact]
+    public void Channel_ExposesItemListAndLanguage()
+    {
+        var items = new System.Collections.Generic.List<Item> { new() { Title = "Show.S01E01" } };
+        var channel = new Channel { Item = items, Language = "en-us" };
+
+        Assert.Same(items, channel.Item);
+        Assert.Equal("en-us", channel.Language);
+    }
+
+    [Fact]
     public void Image_RoundTripsAllProperties()
     {
         var url = new System.Uri("http://example.com/img.png");
