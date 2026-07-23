@@ -227,4 +227,67 @@ public class ShowListAppServiceQueryTests
         Assert.Equal(1, result.TotalGivenUpEpisodes);
         Assert.Equal(5, result.ShowPriority);
     }
+
+    [Fact]
+    public void AiringAroundNow_SetsPerFieldDecisionFlags_ForShowsDecidedThroughEachFilterDimension()
+    {
+        // Each of these shows is undecided at the show level (Wanted == null), but becomes
+        // "relevant" (and its per-field decision flags set) purely because a *different* entity
+        // (type/network/webnetwork/language/genre) was independently marked wanted.
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            var type = TestData.NewType("Scripted", wanted: true);
+            var byType = TestData.NewShow("By Type", type: type);
+            TestData.NewEpisode(byType, 1, 1, DateTimeOffset.UtcNow);
+
+            var network = TestData.NewNetwork("AMC", wanted: true);
+            var byNetwork = TestData.NewShow("By Network", network: network);
+            TestData.NewEpisode(byNetwork, 1, 1, DateTimeOffset.UtcNow);
+
+            var webNetwork = TestData.NewWebNetwork("Netflix", wanted: true);
+            var byWebNetwork = TestData.NewShow("By WebNetwork", webNetwork: webNetwork);
+            TestData.NewEpisode(byWebNetwork, 1, 1, DateTimeOffset.UtcNow);
+
+            var language = TestData.NewLanguage("English", wanted: true);
+            var byLanguage = TestData.NewShow("By Language", language: language);
+            TestData.NewEpisode(byLanguage, 1, 1, DateTimeOffset.UtcNow);
+
+            var genre = TestData.NewGenreText("Drama", wanted: true);
+            var byGenre = TestData.NewShow("By Genre");
+            byGenre.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genre, show = byGenre } };
+            TestData.NewEpisode(byGenre, 1, 1, DateTimeOffset.UtcNow);
+
+            // WebNetworks.country decides it (Networks has no country at all), exercising the
+            // "only set countryinclude via the web-network side" branch.
+            var webCountry = new Showlist2026.Entities.Country { code = "GB", name = "GB", Wanted = true };
+            var byWebCountry = TestData.NewShow("By WebCountry", webNetwork: TestData.NewWebNetwork("Hulu", country: webCountry));
+            TestData.NewEpisode(byWebCountry, 1, 1, DateTimeOffset.UtcNow);
+
+            ctx.Shows.AddRange(byType, byNetwork, byWebNetwork, byLanguage, byGenre, byWebCountry);
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var results = service.AiringAroundNowForUser(-1, 1);
+
+        var byTypeResult = results.Single(r => r.ep.show!.name == "By Type");
+        Assert.True(byTypeResult.typeinclude);
+        Assert.True(byTypeResult.Activelyselected);
+
+        var byNetworkResult = results.Single(r => r.ep.show!.name == "By Network");
+        Assert.True(byNetworkResult.networkinclude);
+
+        var byWebNetworkResult = results.Single(r => r.ep.show!.name == "By WebNetwork");
+        Assert.True(byWebNetworkResult.webnetworkinclude);
+
+        var byLanguageResult = results.Single(r => r.ep.show!.name == "By Language");
+        Assert.True(byLanguageResult.languageinclude);
+
+        var byGenreResult = results.Single(r => r.ep.show!.name == "By Genre");
+        Assert.True(byGenreResult.genreinclude);
+
+        var byWebCountryResult = results.Single(r => r.ep.show!.name == "By WebCountry");
+        Assert.True(byWebCountryResult.countryinclude);
+    }
 }
