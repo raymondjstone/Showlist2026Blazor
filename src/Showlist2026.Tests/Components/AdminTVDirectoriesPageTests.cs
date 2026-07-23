@@ -39,4 +39,39 @@ public class AdminTVDirectoriesPageTests : BlazorTestBase
         using var verify = Db.CreateContext();
         Assert.Null(verify.TVDirectories.Find(id));
     }
+
+    [Fact]
+    public void EditingAnExistingDirectory_PersistsAllFieldsThroughRealService()
+    {
+        int id;
+        using (var ctx = Db.CreateContext())
+        {
+            var dir = new Showlist2026.Entities.TVDirectories
+            {
+                Name = @"D:\Old", DaysToScan = 7, Filter = "*.*", MinFileSize = 50000, Aliasable = false
+            };
+            ctx.TVDirectories.Add(dir);
+            ctx.SaveChanges();
+            id = dir.Id;
+        }
+
+        var cut = Render<AdminTVDirectories>();
+
+        cut.FindAll("input.form-control-sm")[0].Change(@"D:\New");
+        cut.FindAll("input.form-control-sm")[1].Change("14");
+        cut.FindAll("input.form-control-sm")[2].Change("*.mkv");
+        cut.FindAll("input.form-control-sm")[3].Change("100000");
+        cut.Find("input.form-check-input").Change(true);
+        cut.Find("button.btn-primary.btn-sm").Click(); // Save
+
+        Assert.Contains(@"Saved: D:\New", cut.Markup);
+
+        using var verify = Db.CreateContext();
+        var updated = verify.TVDirectories.Find(id)!;
+        Assert.Equal(@"D:\New", updated.Name);
+        Assert.Equal(14, updated.DaysToScan);
+        Assert.Equal("*.mkv", updated.Filter);
+        Assert.Equal(100000, updated.MinFileSize);
+        Assert.True(updated.Aliasable);
+    }
 }
