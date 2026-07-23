@@ -1217,8 +1217,8 @@ namespace Showlist2026.Services
                 .Include(e => e.show)
                 .Include(e => e.show.Languages)
                 .Include(e => e.show.Types)
-                .Include(e => e.show.WebNetworks)
-                .Include(e => e.show.Networks)
+                .Include(e => e.show.WebNetworks).ThenInclude(wn => wn.country)
+                .Include(e => e.show.Networks).ThenInclude(n => n.country)
                 .ToList();
             _logger.LogDebug($"PERF[MissedEpisodes] Missed episodes loaded: {eps.Count} in {sw.ElapsedMilliseconds}ms");
 
