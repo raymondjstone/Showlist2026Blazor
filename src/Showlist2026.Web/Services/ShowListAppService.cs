@@ -319,8 +319,8 @@ namespace Showlist2026.Services
                 .Include(s => s.show)
                 .Include(s => s.show.Languages)
                 .Include(s => s.show.Types)
-                .Include(s => s.show.WebNetworks)
-                .Include(s => s.show.Networks)
+                .Include(s => s.show.WebNetworks).ThenInclude(wn => wn.country)
+                .Include(s => s.show.Networks).ThenInclude(n => n.country)
                 .ToList();
             _logger.LogDebug($"PERF[AiringAroundNow] Selected show episodes loaded ({selectedEps.Count} eps): {sw.ElapsedMilliseconds}ms");
 
@@ -338,8 +338,8 @@ namespace Showlist2026.Services
                 .Include(s => s.show)
                 .Include(s => s.show.Languages)
                 .Include(s => s.show.Types)
-                .Include(s => s.show.WebNetworks)
-                .Include(s => s.show.Networks)
+                .Include(s => s.show.WebNetworks).ThenInclude(wn => wn.country)
+                .Include(s => s.show.Networks).ThenInclude(n => n.country)
                 .ToList();
             _logger.LogDebug($"PERF[AiringAroundNow] New show S01E01 loaded ({newShowEps.Count} eps): {sw.ElapsedMilliseconds}ms");
 
@@ -360,8 +360,8 @@ namespace Showlist2026.Services
                         .Include(s => s.show)
                         .Include(s => s.show.Languages)
                         .Include(s => s.show.Types)
-                        .Include(s => s.show.WebNetworks)
-                        .Include(s => s.show.Networks)
+                        .Include(s => s.show.WebNetworks).ThenInclude(wn => wn.country)
+                        .Include(s => s.show.Networks).ThenInclude(n => n.country)
                         .ToList();
                 }
                 _logger.LogDebug($"PERF[AiringAroundNow] Ignored show episodes loaded ({ignoredEps.Count} eps): {sw.ElapsedMilliseconds}ms");
@@ -622,8 +622,8 @@ namespace Showlist2026.Services
                 .Include(s => s.show)
                 .Include(s => s.show.Languages)
                 .Include(s => s.show.Types)
-                .Include(s => s.show.WebNetworks)
-                .Include(s => s.show.Networks)
+                .Include(s => s.show.WebNetworks).ThenInclude(wn => wn.country)
+                .Include(s => s.show.Networks).ThenInclude(n => n.country)
                 .ToList();
             _logger.LogDebug($"PERF[UndecidedShows] Episodes loaded ({eps.Count}): {sw.ElapsedMilliseconds}ms");
 
@@ -715,8 +715,8 @@ namespace Showlist2026.Services
                 .Include(s => s.show)
                 .Include(s => s.show.Languages)
                 .Include(s => s.show.Types)
-                .Include(s => s.show.WebNetworks)
-                .Include(s => s.show.Networks)
+                .Include(s => s.show.WebNetworks).ThenInclude(wn => wn.country)
+                .Include(s => s.show.Networks).ThenInclude(n => n.country)
                 .ToList();
             _logger.LogDebug($"PERF[NextUnwatched] Unwatched eps loaded ({unwatchedEps.Count}): {sw.ElapsedMilliseconds}ms");
 
@@ -1289,8 +1289,8 @@ namespace Showlist2026.Services
                 .Include(e => e.show)
                 .Include(e => e.show.Languages)
                 .Include(e => e.show.Types)
-                .Include(e => e.show.WebNetworks)
-                .Include(e => e.show.Networks)
+                .Include(e => e.show.WebNetworks).ThenInclude(wn => wn.country)
+                .Include(e => e.show.Networks).ThenInclude(n => n.country)
                 .ToList();
 
             // Attach genres
