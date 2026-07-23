@@ -1483,6 +1483,7 @@ namespace Showlist2026.Services
 
             var genres = _db.Genres
                 .Include(g => g.genretext)
+                .Include(g => g.show)
                 .Where(g => g.show != null && watchedShowIds.Contains(g.show.Id) && g.genretext != null)
                 .AsNoTracking()
                 .ToList()

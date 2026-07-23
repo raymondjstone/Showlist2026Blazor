@@ -37,6 +37,36 @@ public class ShowListAppServiceStatsSearchTests
     }
 
     [Fact]
+    public void GetStatistics_GenreBreakdown_CountsDistinctShowsPerGenre()
+    {
+        // Regression test: GetStatistics used to crash with a NullReferenceException whenever a
+        // watched show had any genre attached (i.e. virtually always in real data), because the
+        // genre query filtered on g.show but never Include()d it - EF translates `g.show.Id`
+        // inside the Where predicate against the FK column fine, but the materialized Genre.show
+        // navigation stays null without an explicit Include, so the later `x.show.Id` projection
+        // (after ToList()) threw.
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("Show", wanted: true, status: "Running");
+            show.Genres = new List<Showlist2026.Entities.Genre>
+            {
+                new() { genretext = TestData.NewGenreText("Drama"), show = show }
+            };
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-10), watched: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var stats = service.GetStatistics();
+
+        var genre = Assert.Single(stats.GenreBreakdown);
+        Assert.Equal("Drama", genre.Key);
+        Assert.Equal(1, genre.Value);
+    }
+
+    [Fact]
     public void GetStatistics_CountsCompletedShows()
     {
         using var db = new TestDb();
