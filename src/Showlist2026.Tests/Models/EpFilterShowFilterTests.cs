@@ -192,6 +192,48 @@ public class EpFilterShowFilterTests
     }
 
     [Fact]
+    public void ShowFilter_WebNetworkFilter_ReturnsNegativeOne_WhenNoWebNetwork()
+    {
+        var sf = new ShowFilter(new Show { Id = 1 });
+        Assert.Equal(-1, sf.webnetworkFilter._ItemKey);
+    }
+
+    [Fact]
+    public void ShowFilter_LanguageFilter_ReturnsNegativeOne_WhenNoLanguage()
+    {
+        var sf = new ShowFilter(new Show { Id = 1 });
+        Assert.Equal(-1, sf.languageFilter._ItemKey);
+    }
+
+    [Fact]
+    public void ShowFilter_TypeFilter_ReturnsNegativeOne_WhenNoType()
+    {
+        var sf = new ShowFilter(new Show { Id = 1 });
+        Assert.Equal(-1, sf.typeFilter._ItemKey);
+    }
+
+    [Fact]
+    public void EpFilter_WebNetworkFilter_ReturnsNegativeOne_WhenNoWebNetwork()
+    {
+        var ef = MakeEpFilter(new Show { Id = 5 });
+        Assert.Equal(-1, ef.webnetworkFilter._ItemKey);
+    }
+
+    [Fact]
+    public void EpFilter_LanguageFilter_ReturnsNegativeOne_WhenNoLanguage()
+    {
+        var ef = MakeEpFilter(new Show { Id = 5 });
+        Assert.Equal(-1, ef.languageFilter._ItemKey);
+    }
+
+    [Fact]
+    public void EpFilter_TypeFilter_ReturnsNegativeOne_WhenNoType()
+    {
+        var ef = MakeEpFilter(new Show { Id = 5 });
+        Assert.Equal(-1, ef.typeFilter._ItemKey);
+    }
+
+    [Fact]
     public void ShowFilter_FromEpFilter_CopiesActiveFlags()
     {
         var show = new Show { Id = 1 };

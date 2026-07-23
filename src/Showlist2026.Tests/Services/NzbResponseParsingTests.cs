@@ -198,4 +198,26 @@ public class NzbResponseParsingTests
         Assert.Equal("S01E01", result.EpisodeCode);
         Assert.Equal("http://example.com/download/1", result.DownloadUrl);
     }
+
+    [Fact]
+    public void CrawledSiteInfo_RoundTripsAllProperties()
+    {
+        // Populated by CrawlNzbSitesForShow/CrawlNzbRssFeedsForShow, which use a bare HttpClient
+        // and so can't be exercised end-to-end here (see the class doc comment) - a plain
+        // round-trip is the only reachable coverage for these properties.
+        var info = new CrawledSiteInfo
+        {
+            SiteName = "MySite",
+            Url = "http://example.com/search",
+            HttpStatus = 200,
+            Success = true,
+            ErrorMessage = "none"
+        };
+
+        Assert.Equal("MySite", info.SiteName);
+        Assert.Equal("http://example.com/search", info.Url);
+        Assert.Equal(200, info.HttpStatus);
+        Assert.True(info.Success);
+        Assert.Equal("none", info.ErrorMessage);
+    }
 }

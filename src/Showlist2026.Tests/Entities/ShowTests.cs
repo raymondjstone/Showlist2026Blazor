@@ -45,6 +45,38 @@ public class ShowTests
     }
 
     [Fact]
+    public void ShowStart_FallsBackToEnGbFormat_WhenNotValidEnUsDate()
+    {
+        // "13/05/2020" isn't a valid en-US (MM/dd/yyyy) date - month 13 doesn't exist - but it is
+        // a valid en-GB (dd/MM/yyyy) date, exercising the second TryParse fallback.
+        var show = new Show { premiered = "13/05/2020" };
+        Assert.Equal(new DateTime(2020, 5, 13), show.ShowStart);
+    }
+
+    [Fact]
+    public void Regexp_EmptyWhenNameMissing()
+    {
+        var show = new Show { name = null };
+        Assert.Equal("", show.regexp);
+    }
+
+    [Fact]
+    public void NamecleanFolderFriendly_EmptyWhenNameMissing()
+    {
+        var show = new Show { name = null };
+        Assert.Equal("", show.namecleanFolderFriendly);
+    }
+
+    [Fact]
+    public void FolderAliases_RoundTrips()
+    {
+        var aliases = new List<ShowFolderAlias> { new() { AliasName = "Old Name" } };
+        var show = new Show { FolderAliases = aliases };
+
+        Assert.Same(aliases, show.FolderAliases);
+    }
+
+    [Fact]
     public void ShowPageURL_UsesShowlistShowRoute()
     {
         // Locks in the project route contract: /showlist/show/{id}, never the short /show/{id}.
