@@ -126,6 +126,63 @@ public class ShowListAppServiceFileSystemTests : IDisposable
     }
 
     [Fact]
+    public void FindExistingFolders_MatchesFolderAlreadyInParenthesisedYearFormat()
+    {
+        // Complements FindExistingFolders_MatchesFolderByNameAndYearVariant: here the FolderName
+        // itself is ALREADY in "(year)" form, exercising the yearRegexParen branch directly
+        // rather than deriving it from a bare "Name year" candidate.
+        using var db = new TestDb();
+        Directory.CreateDirectory(Path.Combine(_tempRoot, "My Show 2020"));
+
+        var service = TestFactory.CreateAppService(db, TestFactory.Options(tvNameListPath: _tempRoot));
+        var show = new Show { name = "My Show", FolderName = "My Show (2020)" };
+
+        var results = service.FindExistingFolders(show, new List<ShowFolderAlias>());
+
+        var match = Assert.Single(results);
+        Assert.Equal("My Show 2020", match.FolderName);
+    }
+
+    [Fact]
+    public void FindExistingFolders_AlsoScansConfiguredTvDirectories_AndDedupesSharedRoot()
+    {
+        using var db = new TestDb();
+        Directory.CreateDirectory(Path.Combine(_tempRoot, "My Show"));
+        using (var ctx = db.CreateContext())
+        {
+            // Same physical root as TvNameListPath - exercises the "already seen" dedupe branch.
+            ctx.TVDirectories.Add(new TVDirectories { Name = _tempRoot, DaysToScan = 7 });
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db, TestFactory.Options(tvNameListPath: _tempRoot));
+        var show = new Show { name = "My Show" };
+
+        var results = service.FindExistingFolders(show, new List<ShowFolderAlias>());
+
+        Assert.Single(results);
+    }
+
+    [Fact]
+    public void FindExistingFolders_ComputesEarliestAndLatestEpisodeFromFolderContents()
+    {
+        using var db = new TestDb();
+        var showFolder = Path.Combine(_tempRoot, "My Show");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S01E01.mkv"), new byte[10]);
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S02E05.mkv"), new byte[10]);
+        File.WriteAllBytes(Path.Combine(showFolder, "readme.txt"), new byte[10]); // unparseable, skipped
+
+        var service = TestFactory.CreateAppService(db, TestFactory.Options(tvNameListPath: _tempRoot));
+        var show = new Show { name = "My Show" };
+
+        var match = Assert.Single(service.FindExistingFolders(show, new List<ShowFolderAlias>()));
+
+        Assert.Equal("S01E01", match.EarliestEpisode);
+        Assert.Equal("S02E05", match.LatestEpisode);
+    }
+
+    [Fact]
     public void GetStorageDashboard_MatchesFoldersToShowsAndFlagsUnmatched()
     {
         using var db = new TestDb();
