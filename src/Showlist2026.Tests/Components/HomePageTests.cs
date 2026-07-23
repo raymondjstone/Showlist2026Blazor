@@ -36,4 +36,39 @@ public class HomePageTests : BlazorTestBase
         Assert.Contains("Shows", cut.Markup);
         Assert.DoesNotContain("spinner-border", cut.Markup);
     }
+
+    [Fact]
+    public void RendersShowsNeedingUpdateCount()
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Show");
+            show.needsupdate = true;
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<Home>();
+
+        Assert.Contains("1", cut.Find(".text-bg-danger .card-text").TextContent);
+    }
+
+    [Fact]
+    public void RendersRecentlyUpdatedShowsList_WhenUpdatedWithinLast24Hours()
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Recently Updated Show");
+            show.needsupdate = false;
+            show.updated = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<Home>();
+
+        Assert.Contains("Shows Updated in Last 24 Hours (1)", cut.Markup);
+        Assert.Contains("Recently Updated Show", cut.Markup);
+        Assert.Contains("1", cut.Find(".text-bg-info .card-text").TextContent);
+    }
 }
