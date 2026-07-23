@@ -245,6 +245,143 @@ public class ShowListBackgroundServiceHttpTests
     }
 
     [Fact]
+    public async Task RefreshShows_UpdatesExistingShow_WithFullDataAndPreExistingGenres()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new
+        {
+            id = 555,
+            name = "Updated Name",
+            status = "Ended",
+            premiered = "2020-01-01",
+            summary = "Updated summary",
+            updated = 1700000000,
+            weight = 0,
+            url = "http://tvmaze/shows/555",
+            network = new
+            {
+                id = 9,
+                name = "HBO",
+                country = new { name = "United States", code = "US" } // no timezone -> exercises getTimezone lookup
+            },
+            webChannel = new
+            {
+                id = 11,
+                name = "HBO Max",
+                country = new { name = "United States", code = "US" }
+            },
+            genres = new[] { "Drama" },
+            type = "Scripted",
+            language = "English",
+            schedule = new { time = "21:00", days = new[] { "Sunday" } },
+            image = new { medium = "http://img/m.jpg", original = "http://img/o.jpg" },
+            externals = new { tvrage = 12345, thetvdb = 67890, imdb = "tt1234567" },
+        });
+        httpTest.RespondWithJson(Array.Empty<object>()); // episodes fetch
+
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("Old Name", showid: 555);
+            show.needsupdate = true;
+            show.Genres = new List<Showlist2026.Entities.Genre>
+            {
+                new() { genretext = new Showlist2026.Entities.GenreText { genre = "Old Genre" }, show = show }
+            };
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.RefreshShows());
+        }
+
+        using var verify = db.CreateContext();
+        var updated = verify.Shows
+            .Include(s => s.Genres).ThenInclude(g => g.genretext)
+            .Include(s => s.WebNetworks)
+            .Single(s => s.Id == showId);
+        Assert.Equal("Updated Name", updated.name);
+        Assert.Equal("HBO Max", updated.WebNetworks!.name);
+        Assert.Single(updated.Genres!);
+        Assert.Equal("Drama", updated.Genres!.Single().genretext!.genre);
+        Assert.Equal("12345", updated.tvrage);
+        Assert.Equal("http://img/m.jpg", updated.imagemed);
+        Assert.False(updated.needsupdate);
+    }
+
+    [Fact]
+    public async Task RefreshShows_UsesPlaceholders_WhenNetworkAndWebChannelAreMissing()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new
+        {
+            id = 555,
+            name = "Web-Only Show",
+            status = "Running",
+            updated = 1700000000,
+            weight = 0,
+            genres = Array.Empty<string>(),
+            type = "Scripted",
+            language = "English",
+        });
+        httpTest.RespondWithJson(Array.Empty<object>()); // episodes fetch
+
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("Old Name", showid: 555);
+            show.needsupdate = true;
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.RefreshShows());
+        }
+
+        using var verify = db.CreateContext();
+        var updated = verify.Shows.Find(showId)!;
+        Assert.Equal("Web-Only Show", updated.name);
+        Assert.False(updated.needsupdate);
+    }
+
+    [Fact]
+    public async Task RefreshShows_LeavesShowNeedingUpdate_WhenTvMazeRequestFails()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(status: 500);
+
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("Show", showid: 555);
+            show.needsupdate = true;
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.RefreshShows());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.True(verify.Shows.Find(showId)!.needsupdate);
+    }
+
+    [Fact]
     public async Task RefreshShowBatch_ProcessesAllPagesUpToMaxShowPage()
     {
         using var httpTest = new HttpTest();
