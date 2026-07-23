@@ -187,4 +187,163 @@ public class ShowDetailPageTests : BlazorTestBase
         using var verify = Db.CreateContext();
         Assert.Contains(verify.Episodes, e => e.Watched && e.number == 2);
     }
+
+    [Fact]
+    public void RendersShowsWithSameName_AsPotentialConfusionWarning()
+    {
+        var showId = SeedShowWithEpisodes();
+        using (var ctx = Db.CreateContext())
+        {
+            ctx.Shows.Add(TestData.NewShow("Breaking Bad", showid: 999)); // same name, different showid
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+
+        Assert.Contains("may get confused with", cut.Markup);
+    }
+
+    [Fact]
+    public void ClickingWatchedIconOnNextEpisode_Desktop_MarksItWatched()
+    {
+        var showId = SeedShowWithEpisodes();
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("div.row.bg-light i.far.fa-eye").Click();
+
+        using var verify = Db.CreateContext();
+        Assert.Contains(verify.Episodes, e => e.Watched && e.number == 3);
+    }
+
+    [Fact]
+    public void ClickingGiveUpIconOnNextEpisode_Desktop_MarksItGivenUp()
+    {
+        var showId = SeedShowWithEpisodes();
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("div.row.bg-light i.fas.fa-flag.text-muted").Click();
+
+        using var verify = Db.CreateContext();
+        Assert.Contains(verify.Episodes, e => e.GivenUp && e.number == 3);
+    }
+
+    [Fact]
+    public void ClickingWatchedIconOnNextEpisode_Mobile_MarksItWatched()
+    {
+        var showId = SeedShowWithEpisodes();
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("div.d-md-none i.far.fa-eye").Click();
+
+        using var verify = Db.CreateContext();
+        Assert.Contains(verify.Episodes, e => e.Watched && e.number == 3);
+    }
+
+    [Fact]
+    public void UndoingGivenUpNextEpisode_ThroughIcon_MarksItNotGivenUp()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Given Up Show", wanted: true);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(7), givenUp: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("div.row.bg-light i.fas.fa-flag.text-danger").Click();
+
+        using var verify = Db.CreateContext();
+        Assert.Contains(verify.Episodes, e => !e.GivenUp && e.number == 1);
+    }
+
+    [Fact]
+    public void RendersSimilarShows_MatchingOnSharedGenre()
+    {
+        var genre = TestData.NewGenreText("Drama");
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad", wanted: true);
+            show.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genre, show = show } };
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
+
+            var similar = TestData.NewShow("Better Call Saul"); // undecided, so not excluded
+            similar.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genre, show = similar } };
+
+            ctx.Shows.Add(show);
+            ctx.Shows.Add(similar);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+
+        Assert.Contains("Similar Shows", cut.Markup);
+        Assert.Contains("Better Call Saul", cut.Markup);
+    }
+
+    [Fact]
+    public void CrawlNzbSites_WithNoUnwatchedEpisodes_ReportsNoEpisodesError()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("All Watched Show", wanted: true);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30), watched: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-outline-primary.btn-sm.ms-3").Click(); // Crawl API
+
+        Assert.Contains("Crawl Results: 0 found from 0 sites", cut.Markup);
+        Assert.Contains("No unwatched episodes to search for", cut.Markup);
+    }
+
+    [Fact]
+    public void CrawlRssFeeds_WithNoUnwatchedEpisodes_ReportsNoEpisodesError()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("All Watched Show", wanted: true);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30), watched: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-outline-info.btn-sm.ms-1").Click(); // Crawl RSS
+
+        Assert.Contains("Crawl Results: 0 found from 0 sites", cut.Markup);
+        Assert.Contains("No unwatched episodes to search for", cut.Markup);
+    }
+
+    [Fact]
+    public async Task AddingAliasWithSeasonOffset_ShowsMappingPreviewAndPersistedBadge()
+    {
+        var showId = SeedShowWithEpisodes();
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-outline-secondary.btn-sm").Click(); // toggles "showAliasInput"
+
+        cut.Find("input[placeholder='Season offset']").Input("2");
+        Assert.Contains("S3", cut.Markup);
+        Assert.Contains("this show's S01", cut.Markup);
+
+        await cut.Find("input[placeholder='Old show / folder name in files']").InputAsync("Old Show Name");
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Add").Click();
+
+        Assert.Contains("S3", cut.Markup);
+        Assert.Contains("S1", cut.Markup);
+        using var verify = Db.CreateContext();
+        var alias = Assert.Single(verify.ShowFolderAliases);
+        Assert.Equal(2, alias.SeasonOffset);
+    }
 }
