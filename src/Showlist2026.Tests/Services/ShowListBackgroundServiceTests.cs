@@ -128,6 +128,47 @@ public class ShowListBackgroundServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ShowDownloadedJob_CopiesNewFileToInterestedFriendsFolder()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "My.Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        var videoFile = Path.Combine(showFolder, "My.Show.S01E01.mkv");
+        File.WriteAllBytes(videoFile, new byte[1024]);
+
+        var friendFolder = Path.Combine(_tempRoot, "FriendFolder");
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+            var show = TestData.NewShow("My Show", wanted: true, folderName: "My.Show");
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+
+            var friend = new Friend { Name = "Alice", FolderPath = friendFolder };
+            ctx.Friends.Add(friend);
+            ctx.SaveChanges();
+            ctx.FriendShows.Add(new FriendShow { FriendId = friend.Id, ShowId = showId });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            await service.ShowDownloadedJob();
+        }
+
+        var destFile = Path.Combine(friendFolder, "My.Show", "Season 1", "My.Show.S01E01.mkv");
+        Assert.True(File.Exists(destFile));
+
+        using var verify = db.CreateContext();
+        Assert.Single(verify.FriendCopies.Where(c => c.FileName == "My.Show.S01E01.mkv"));
+    }
+
+    [Fact]
     public async Task ResolveAliasFolders_MergesAliasFolderIntoRealFolder_ApplyingSeasonOffset()
     {
         using var db = new TestDb();
