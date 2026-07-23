@@ -146,6 +146,81 @@ public class NzbResponseParsingTests
     }
 
     [Fact]
+    public void ParseRssFeedResponse_ReturnsEmpty_OnErrorElement()
+    {
+        var xml = """<rss><error code="100" description="Invalid API key" /></rss>""";
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        var summary = new NzbSiteCrawlSummary();
+
+        var results = service.ParseRssFeedResponse(xml, "MySite", "http://feed?r=apikey123", UnwatchedEpisode(1, 1), summary);
+
+        Assert.Empty(results);
+        Assert.Contains(summary.DebugInfo, d => d.Contains("Invalid API key"));
+    }
+
+    [Fact]
+    public void ParseRssFeedResponse_ReturnsEmpty_OnMalformedXml()
+    {
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        var summary = new NzbSiteCrawlSummary();
+
+        var results = service.ParseRssFeedResponse("not xml {{{", "MySite", "http://feed?r=apikey123", UnwatchedEpisode(1, 1), summary);
+
+        Assert.Empty(results);
+        Assert.Contains(summary.DebugInfo, d => d.Contains("RSS XML Parse Error"));
+    }
+
+    [Fact]
+    public void ParseRssFeedResponse_FallsBackToNewznabAttrForSize_WhenNoEnclosureLength()
+    {
+        var xml = """
+        <rss><channel>
+          <item>
+            <title>Show.Name.S01E01.mkv</title>
+            <link>http://example.com/page/1</link>
+            <newznab:attr xmlns:newznab="http://newznab.com" name="size" value="2000000000" />
+          </item>
+        </channel></rss>
+        """;
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        var summary = new NzbSiteCrawlSummary();
+
+        var results = service.ParseRssFeedResponse(xml, "MySite", "http://feed?r=apikey123", UnwatchedEpisode(1, 1), summary);
+
+        var result = Assert.Single(results);
+        Assert.Equal("2.00 GB", result.Size); // > 1_000_000_000 bytes -> GB branch
+    }
+
+    [Fact]
+    public void ParseRssFeedResponse_MatchesAlternateNxNNEpisodeFormat_AndTruncatesLongTitles()
+    {
+        var xml = $"""
+        <rss><channel>
+          <item>
+            <title>{new string('x', 200)} 1x01</title>
+            <link>http://example.com/page/1</link>
+          </item>
+        </channel></rss>
+        """;
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        var summary = new NzbSiteCrawlSummary();
+
+        var results = service.ParseRssFeedResponse(xml, "MySite", "http://feed?r=apikey123", UnwatchedEpisode(1, 1), summary);
+
+        var result = Assert.Single(results);
+        Assert.Equal("S01E01", result.EpisodeCode);
+        Assert.EndsWith("...", result.Title);
+        Assert.Equal(153, result.Title.Length); // 150 chars + "..."
+    }
+
+    [Fact]
     public void ParseNzbSiteHtml_FindsMatchViaAnchorText()
     {
         var html = """

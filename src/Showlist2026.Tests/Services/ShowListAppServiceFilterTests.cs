@@ -205,4 +205,60 @@ public class ShowListAppServiceFilterTests
         Assert.True(eps.Single(e => e.number == 1).GivenUp);
         Assert.False(eps.Single(e => e.number == 2).GivenUp); // already watched, untouched
     }
+
+    [Fact]
+    public async Task LanguageFilter_ReturnsFalse_WhenLanguageMissing()
+    {
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        Assert.False(await service.LanguageFilter(999, true));
+    }
+
+    [Fact]
+    public async Task TypeFilter_ReturnsFalse_WhenTypeMissing()
+    {
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        Assert.False(await service.TypeFilter(999, true));
+    }
+
+    [Fact]
+    public async Task NetworkFilter_ReturnsFalse_WhenNetworkMissing()
+    {
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        Assert.False(await service.NetworkFilter(999, true));
+    }
+
+    [Fact]
+    public async Task WebNetworkFilter_ReturnsFalse_WhenWebNetworkMissing()
+    {
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        Assert.False(await service.WebNetworkFilter(999, true));
+    }
+
+    [Fact]
+    public async Task GenreFilter_ReturnsFalse_WhenGenreTextMissing()
+    {
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        Assert.False(await service.GenreFilter(999, true));
+    }
+
+    [Fact]
+    public async Task CountryFilter_ReturnsFalse_WhenCountryMissing()
+    {
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        Assert.False(await service.CountryFilter(999, true));
+    }
+
+    [Fact]
+    public async Task GivenUpFilter_ReturnsFalse_WhenEpisodeMissing()
+    {
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        Assert.False(await service.GivenUpFilter(999, true));
+    }
 }
