@@ -216,6 +216,61 @@ public class ShowListAppServiceFileSystemTests : IDisposable
     }
 
     [Fact]
+    public void GetStorageDashboard_FallsBackToDefaultFolderName_WhenFolderNameNotSet()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "My Show");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "ep1.mkv"), new byte[1024]);
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = 1 });
+            ctx.Shows.Add(TestData.NewShow("My Show", wanted: true)); // no FolderName set
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var dashboard = service.GetStorageDashboard();
+
+        Assert.Equal(1, dashboard.MatchedFolders);
+        Assert.Equal("My Show", dashboard.Shows.Single().ShowName);
+    }
+
+    [Fact]
+    public void GetStorageDashboard_MergesSameFolderName_AcrossMultipleTvDirectories_AndSkipsMissingRoots()
+    {
+        using var db = new TestDb();
+        var tvDirA = Path.Combine(_tempRoot, "TvDirA");
+        var tvDirB = Path.Combine(_tempRoot, "TvDirB");
+        var folderA = Path.Combine(tvDirA, "My.Show");
+        var folderB = Path.Combine(tvDirB, "My.Show");
+        Directory.CreateDirectory(folderA);
+        Directory.CreateDirectory(folderB);
+        File.WriteAllBytes(Path.Combine(folderA, "ep1.mkv"), new byte[1000]);
+        File.WriteAllBytes(Path.Combine(folderB, "ep2.mkv"), new byte[2000]);
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDirA, DaysToScan = 1 });
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDirB, DaysToScan = 1 });
+            // Third configured directory whose folder doesn't exist on disk - exercises the
+            // "root doesn't exist, skip" branch rather than throwing.
+            ctx.TVDirectories.Add(new TVDirectories { Name = Path.Combine(_tempRoot, "DoesNotExist"), DaysToScan = 1 });
+            ctx.Shows.Add(TestData.NewShow("My Show", wanted: true, folderName: "My.Show"));
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var dashboard = service.GetStorageDashboard();
+
+        var merged = Assert.Single(dashboard.Shows);
+        Assert.Equal(3000, merged.SizeBytes); // combined from both roots
+        Assert.Equal(2, merged.FileCount);
+    }
+
+    [Fact]
     public void FindDuplicateEpisodeFiles_GroupsSameEpisodeAcrossFiles()
     {
         using var db = new TestDb();
