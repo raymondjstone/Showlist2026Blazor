@@ -427,6 +427,183 @@ public class ShowListBackgroundServiceHttpTests
     }
 
     [Fact]
+    public async Task RefreshShowEpisodes_RetriesWithoutSpecials_AndSucceeds_OnRateLimitError()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith("rate limited", 429); // first attempt hits "code 429" -> retry
+        httpTest.RespondWithJson(new[]
+        {
+            new { id = 2002, name = "Retry Ep", season = 1, number = 1, airdate = "2024-01-02" }
+        });
+
+        using var db = new TestDb();
+        var show = TestData.NewShow("My Show", showid: 556);
+        using var ctx = db.CreateContext();
+        ctx.Shows.Add(show);
+        ctx.SaveChanges();
+
+        var service = TestFactory.CreateBackgroundService(ctx);
+        var result = await service.RefreshShowEpisodes(show);
+
+        Assert.True(result);
+        var ep = Assert.Single(show.Episodes!);
+        Assert.Equal(2002, ep.episodeid);
+        httpTest.ShouldHaveCalled("*/shows/556/episodes"); // retry drops ?specials=1
+    }
+
+    [Fact]
+    public async Task RefreshShowEpisodes_ReturnsFalse_WhenRetryAfterRateLimitAlsoFails()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith("rate limited", 429);
+        httpTest.RespondWith("still failing", 500);
+
+        using var db = new TestDb();
+        var show = TestData.NewShow("My Show", showid: 557);
+        using var ctx = db.CreateContext();
+        ctx.Shows.Add(show);
+        ctx.SaveChanges();
+
+        var service = TestFactory.CreateBackgroundService(ctx);
+        var result = await service.RefreshShowEpisodes(show);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task RefreshShowEpisodes_LogsAndSkipsAirtimeAdjustment_WhenItOverflowsMaxDateTime()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new[]
+        {
+            // AddMinutes(23:59 -> 1439 minutes) on the last representable instant overflows
+            // DateTimeOffset's range and throws inside the inner airtime-adjustment try/catch.
+            new { id = 3003, name = "Overflow Ep", season = 1, number = 1, airdate = "9999-12-31", airtime = "23:59" }
+        });
+
+        using var db = new TestDb();
+        var show = TestData.NewShow("My Show", showid: 558);
+        using var ctx = db.CreateContext();
+        ctx.Shows.Add(show);
+        ctx.SaveChanges();
+
+        var service = TestFactory.CreateBackgroundService(ctx);
+        var result = await service.RefreshShowEpisodes(show);
+
+        Assert.True(result);
+        var ep = Assert.Single(show.Episodes!);
+        Assert.Equal(3003, ep.episodeid);
+        // The un-adjusted airdate parse still succeeded before the overflow.
+        Assert.NotNull(ep.AirDateOffset2);
+    }
+
+    [Fact]
+    public async Task RefreshShowEpisodes_LogsAndSkipsAirdate_WhenAirdateIsUnparseable()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new[]
+        {
+            new { id = 4004, name = "Bad Date Ep", season = 1, number = 1, airdate = "not-a-real-date" }
+        });
+
+        using var db = new TestDb();
+        var show = TestData.NewShow("My Show", showid: 559);
+        using var ctx = db.CreateContext();
+        ctx.Shows.Add(show);
+        ctx.SaveChanges();
+
+        var service = TestFactory.CreateBackgroundService(ctx);
+        var result = await service.RefreshShowEpisodes(show);
+
+        Assert.True(result);
+        var ep = Assert.Single(show.Episodes!);
+        Assert.Equal(4004, ep.episodeid);
+        Assert.Null(ep.AirDateOffset2);
+    }
+
+    [Fact]
+    public async Task RefreshNetworks_UpdatesExistingNetwork_AndAssignsCountry_WhenPreviouslyUnset()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(status: 404);
+        httpTest.ForCallsTo("*/networks/42").RespondWithJson(new
+        {
+            id = 42,
+            name = "AMC Renamed",
+            country = new { name = "United States", code = "US", timezone = "America/New_York" }
+        });
+
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            ctx.Networks.Add(new Showlist2026.Entities.Network { networkid = 42, name = "AMC", timezone = "Old/Zone" });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.RefreshNetworks());
+        }
+
+        using var verify = db.CreateContext();
+        var network = verify.Networks.Include(n => n.country).Single(n => n.networkid == 42);
+        Assert.Equal("AMC Renamed", network.name);
+        Assert.Equal("America/New_York", network.timezone);
+        Assert.Equal("US", network.country!.code);
+    }
+
+    [Fact]
+    public async Task RefreshNetworks_UsesUnknownCountryPlaceholder_WhenTvMazeOmitsCountry()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(status: 404);
+        httpTest.ForCallsTo("*/networks/7").RespondWithJson(new { id = 7, name = "No Country Network", country = (object?)null });
+
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        Assert.True(await service.RefreshNetworks());
+
+        using var verify = db.CreateContext();
+        var network = verify.Networks.Include(n => n.country).Single(n => n.networkid == 7);
+        Assert.Equal("Unknown", network.country!.name);
+        Assert.Equal("??", network.country.code);
+    }
+
+    [Fact]
+    public async Task RefreshNetworks_ExtendsScanRange_WhenAnExistingNetworkIdExceedsTheDefaultMax()
+    {
+        // Default scan is IDs 1..1800. Seeding a network with an id above that raises the max
+        // (to that id + 50), so a TvMaze response only reachable past 1800 should get picked up.
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(status: 404);
+        httpTest.ForCallsTo("*/networks/1810").RespondWithJson(new
+        {
+            id = 1810,
+            name = "Beyond Default Range",
+            country = new { name = "United States", code = "US", timezone = "America/New_York" }
+        });
+
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            ctx.Networks.Add(new Showlist2026.Entities.Network { networkid = 1805, name = "Existing High Id" });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.RefreshNetworks());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.Contains(verify.Networks, n => n.networkid == 1810 && n.name == "Beyond Default Range");
+    }
+
+    [Fact]
     public async Task RefreshNetworks_CreatesNetworkAndCountry_FromTvMazeResponse()
     {
         // RefreshNetworks always scans network IDs 1..1800 (there's no per-DB lower bound). Only
