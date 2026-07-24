@@ -93,6 +93,91 @@ public class ShowListBackgroundServiceMoreTests : IDisposable
     }
 
     [Fact]
+    public async Task PopulateShowFolderNames_FindsFolderMatchingDefaultNamePlusNetworkCountryCode()
+    {
+        // networklist/webnetworklist are loaded as ALL networks/web-networks in the DB (not
+        // specifically the show's own), and every country code among them is tried as a
+        // "Name XX" suffix - so a matching Network need not be assigned to the show at all.
+        var rootfolder = _tempRoot + Path.DirectorySeparatorChar;
+        Directory.CreateDirectory(Path.Combine(_tempRoot, "My Show US"));
+
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true);
+            var network = TestData.NewNetwork("Some Network", country: TestData.NewCountry("US"));
+            ctx.Shows.Add(show);
+            ctx.Networks.Add(network);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx, TestFactory.Options(tvNameListPath: rootfolder));
+            await service.PopulateShowFolderNames();
+        }
+
+        using var verify = db.CreateContext();
+        Assert.Equal("My Show US", verify.Shows.Find(showId)!.FolderName);
+    }
+
+    [Fact]
+    public async Task PopulateShowFolderNames_FindsFolderMatchingDefaultNamePlusWebNetworkCountryCode()
+    {
+        var rootfolder = _tempRoot + Path.DirectorySeparatorChar;
+        Directory.CreateDirectory(Path.Combine(_tempRoot, "My Show GB"));
+
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true);
+            var webNetwork = TestData.NewWebNetwork("Some Web Network", country: TestData.NewCountry("GB"));
+            ctx.Shows.Add(show);
+            ctx.WebNetworks.Add(webNetwork);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx, TestFactory.Options(tvNameListPath: rootfolder));
+            await service.PopulateShowFolderNames();
+        }
+
+        using var verify = db.CreateContext();
+        Assert.Equal("My Show GB", verify.Shows.Find(showId)!.FolderName);
+    }
+
+    [Fact]
+    public async Task PopulateShowFolderNames_FindsFolderMatchingDefaultNamePlusPremiereYear()
+    {
+        var rootfolder = _tempRoot + Path.DirectorySeparatorChar;
+        Directory.CreateDirectory(Path.Combine(_tempRoot, "My Show 2015"));
+
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true, premiered: "2015-03-01");
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx, TestFactory.Options(tvNameListPath: rootfolder));
+            await service.PopulateShowFolderNames();
+        }
+
+        using var verify = db.CreateContext();
+        Assert.Equal("My Show 2015", verify.Shows.Find(showId)!.FolderName);
+    }
+
+    [Fact]
     public async Task PopulateShowFolderNames_LeavesFolderNameNull_WhenNoMatchingDirectoryExists()
     {
         var rootfolder = _tempRoot + Path.DirectorySeparatorChar;
