@@ -59,4 +59,21 @@ public class DownloadedShowPageTests : BlazorTestBase
 
         Assert.Contains("from2020.mkv", cut.Markup);
     }
+
+    [Fact]
+    public void RendersUnWatchedLabel_WhenEpisodeIsWatched()
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad");
+            var ep = TestData.NewEpisode(show, 1, 1, watched: true);
+            ctx.Shows.Add(show);
+            ctx.TouchFiles.Add(new TouchFile { Name = "breaking.bad.s01e01.mkv", FileDate = DateTime.Now, Episode = ep });
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<DownloadedShow>();
+
+        Assert.Contains("UnWatched", cut.Markup);
+    }
 }

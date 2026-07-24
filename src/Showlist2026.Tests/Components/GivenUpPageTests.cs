@@ -64,6 +64,25 @@ public class GivenUpPageTests : BlazorTestBase
         Assert.Contains("GB)", cut.Markup);
     }
 
+    [Theory]
+    [InlineData("Ended", "bg-secondary")]
+    [InlineData("To Be Determined", "bg-warning text-dark")]
+    [InlineData("In Development", "bg-info")]
+    public void RendersStatusBadge_ForEveryStatusVariant(string status, string expectedClass)
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", status: status);
+            TestData.NewEpisode(show, 1, 1, givenUp: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<GivenUp>();
+
+        Assert.Contains($"{expectedClass}\">{status}", cut.Markup);
+    }
+
     [Fact]
     public void ClickingEachFilterButton_PersistsThroughRealService()
     {

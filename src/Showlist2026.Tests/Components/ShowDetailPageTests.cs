@@ -763,4 +763,145 @@ public class ShowDetailPageTests : BlazorTestBase
         var alias = Assert.Single(verify.ShowFolderAliases);
         Assert.Equal(2, alias.SeasonOffset);
     }
+
+    [Fact]
+    public void SeasonTab_MarkSeasonWatchedButton_MarksAllEpisodesInThatSeasonWatched()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Season Show", wanted: true);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
+            TestData.NewEpisode(show, 1, 2, DateTimeOffset.UtcNow.AddDays(-29));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.FindAll("i[title='Mark season as watched']")[0].Click();
+
+        using var verify = Db.CreateContext();
+        Assert.All(verify.Episodes.Where(e => e.show!.Id == showId), e => Assert.True(e.Watched));
+    }
+
+    [Fact]
+    public void SeasonTab_MobileMarkSeasonWatchedButton_MarksAllEpisodesInThatSeasonWatched()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Season Show", wanted: true);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.FindAll("button").First(b => b.TextContent.Contains("Mark season as watched")).Click();
+
+        using var verify = Db.CreateContext();
+        Assert.All(verify.Episodes.Where(e => e.show!.Id == showId), e => Assert.True(e.Watched));
+    }
+
+    [Fact]
+    public void SeasonTab_DesktopAndMobileRestoreIcons_MarkWatchedEpisodeAsUnwatched()
+    {
+        int showId, episodeId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Season Show", wanted: true);
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30), watched: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+            episodeId = ep.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        var restoreIcons = cut.FindAll("i[title='Mark as NOT watched']");
+        Assert.True(restoreIcons.Count >= 2);
+        restoreIcons[0].Click();
+        using (var verify = Db.CreateContext())
+            Assert.False(verify.Episodes.Find(episodeId)!.Watched);
+
+        // Re-seed watched again for the mobile-specific click.
+        using (var ctx = Db.CreateContext())
+        {
+            ctx.Episodes.Find(episodeId)!.Watched = true;
+            ctx.SaveChanges();
+        }
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        restoreIcons = cut.FindAll("i[title='Mark as NOT watched']");
+        restoreIcons[1].Click();
+        using (var verify = Db.CreateContext())
+            Assert.False(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
+    public void SeasonTab_DesktopAndMobileUndoGivenUpIcons_ClearGivenUpFlag()
+    {
+        int showId, episodeId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Season Show", wanted: true);
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30), givenUp: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+            episodeId = ep.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        var undoIcons = cut.FindAll("i[title='Given up — click to undo']");
+        Assert.True(undoIcons.Count >= 2);
+        undoIcons[0].Click();
+        using (var verify = Db.CreateContext())
+            Assert.False(verify.Episodes.Find(episodeId)!.GivenUp);
+
+        using (var ctx = Db.CreateContext())
+        {
+            ctx.Episodes.Find(episodeId)!.GivenUp = true;
+            ctx.SaveChanges();
+        }
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        undoIcons = cut.FindAll("i[title='Given up — click to undo']");
+        undoIcons[1].Click();
+        using (var verify = Db.CreateContext())
+            Assert.False(verify.Episodes.Find(episodeId)!.GivenUp);
+    }
+
+    [Fact]
+    public void SeasonTab_DesktopAndMobileGiveUpIcons_MarkEpisodeGivenUp()
+    {
+        int showId, episodeId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Season Show", wanted: true);
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+            episodeId = ep.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        var giveUpIcons = cut.FindAll("i[title='Give up this episode']");
+        Assert.True(giveUpIcons.Count >= 2);
+        giveUpIcons[0].Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Episodes.Find(episodeId)!.GivenUp);
+
+        using (var ctx = Db.CreateContext())
+        {
+            ctx.Episodes.Find(episodeId)!.GivenUp = false;
+            ctx.SaveChanges();
+        }
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        giveUpIcons = cut.FindAll("i[title='Give up this episode']");
+        giveUpIcons[1].Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Episodes.Find(episodeId)!.GivenUp);
+    }
 }

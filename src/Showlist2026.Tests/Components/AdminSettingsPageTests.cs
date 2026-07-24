@@ -53,6 +53,43 @@ public class AdminSettingsPageTests : BunitContext
         Assert.NotNull(setting);
         Assert.Equal(@"D:\CustomTvList\", setting!.Value);
         Assert.Contains("Saved", cut.Markup);
+        // TvNameListPath is not a sensitive setting, so its current value renders in the clear.
+        Assert.Contains(@"D:\CustomTvList\", cut.Markup);
+    }
+
+    [Fact]
+    public void DismissingTheStatusMessage_HidesTheAlert()
+    {
+        var cut = Render<AdminSettings>();
+
+        var row = cut.FindAll("tr").First(r => r.TextContent.Contains("Showlist:TvNameListPath"));
+        row.QuerySelector("input.form-control-sm")!.Change(@"D:\CustomTvList\");
+        row = cut.FindAll("tr").First(r => r.TextContent.Contains("Showlist:TvNameListPath"));
+        row.QuerySelector("button.btn-outline-primary")!.Click();
+        Assert.Contains("Saved", cut.Markup);
+
+        cut.Find("button.btn-close").Click();
+
+        Assert.DoesNotContain("Saved", cut.Markup);
+    }
+
+    [Fact]
+    public void LoadSettings_SwallowsAndFallsBackToNoOverrides_WhenDbHasCaseInsensitiveDuplicateKeys()
+    {
+        // AppSetting.Key is a case-sensitive primary key, so both rows save fine - but
+        // LoadSettings loads them into a case-INSENSITIVE dictionary, which throws on
+        // the duplicate. That must be caught rather than crashing the whole page.
+        using (var ctx = _db.CreateContext())
+        {
+            ctx.AppSettings.Add(new AppSetting { Key = "Showlist:TvNameListPath", Value = "A" });
+            ctx.AppSettings.Add(new AppSetting { Key = "showlist:tvnamelistpath", Value = "B" });
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<AdminSettings>();
+
+        Assert.Contains("Showlist:TvNameListPath", cut.Markup);
+        Assert.Contains("(not set)", cut.Markup); // DB overrides discarded, falls back to defaults
     }
 
     [Fact]

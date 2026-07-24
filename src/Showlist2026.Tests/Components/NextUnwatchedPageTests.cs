@@ -17,6 +17,15 @@ public class NextUnwatchedPageTests : BlazorTestBase
     }
 
     [Fact]
+    public async Task HandleKeyPressStatic_IsANoOpRequiredForJsInterop()
+    {
+        // The instance-bound key handler does the real work; this static stub only exists
+        // because [JSInvokable] methods must be static or instance-callable via a DotNetObjectReference
+        // - covered directly since nothing in the browser ever calls back into it during tests.
+        await Showlist2026.Web.Components.Pages.NextUnwatched.HandleKeyPressStatic("j");
+    }
+
+    [Fact]
     public void RendersOneTabPerBehindBucket_ShowingEarliestUnwatchedEpisode()
     {
         using (var ctx = Db.CreateContext())
@@ -52,6 +61,90 @@ public class NextUnwatchedPageTests : BlazorTestBase
 
         using var verify = Db.CreateContext();
         Assert.True(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
+    public void ClickingMobileWatchedIcon_MarksEpisodeWatchedThroughRealService()
+    {
+        int episodeId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true);
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-9));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            episodeId = ep.Id;
+        }
+
+        var cut = Render<NextUnwatched>();
+        var eyeIcons = cut.FindAll("i.fa-eye");
+        Assert.True(eyeIcons.Count >= 2); // desktop + mobile
+        eyeIcons[1].Click();
+
+        using var verify = Db.CreateContext();
+        Assert.True(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
+    public void ClickingMobileCatchUp_MarksAllAiredEpisodesWatchedThroughRealService()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-9));
+            TestData.NewEpisode(show, 1, 2, DateTimeOffset.UtcNow.AddDays(-8));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<NextUnwatched>();
+        var catchUpButtons = cut.FindAll("button.btn-outline-success");
+        Assert.True(catchUpButtons.Count >= 2); // desktop + mobile
+        catchUpButtons[1].Click();
+
+        using var verify = Db.CreateContext();
+        Assert.All(verify.Episodes.Where(e => e.show!.Id == showId), e => Assert.True(e.Watched));
+    }
+
+    [Theory]
+    [InlineData("Ended", "bg-secondary")]
+    [InlineData("To Be Determined", "bg-warning text-dark")]
+    [InlineData("In Development", "bg-info")]
+    [InlineData("Something Else", "bg-light text-dark")]
+    public void RendersStatusBadge_ForEveryStatusVariant(string status, string expectedClass)
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true, status: status);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-9));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<NextUnwatched>();
+
+        Assert.Contains($"{expectedClass}\">{status}", cut.Markup);
+    }
+
+    [Theory]
+    [InlineData(2, "bg-warning text-dark\">Med")]
+    [InlineData(1, "bg-info\">Low")]
+    public void RendersPriorityBadge_ForMediumAndLowPriority(int priority, string expectedBadge)
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true);
+            show.Priority = priority;
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-9));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<NextUnwatched>();
+
+        Assert.Contains(expectedBadge, cut.Markup);
     }
 
     [Fact]
