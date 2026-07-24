@@ -131,6 +131,161 @@ public class ShowListBackgroundServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ShowDownloadedJob_SkipsContinuationCandidate_WhenSeasonOffsetProducesInvalidSeason()
+    {
+        // effectiveSeason = fileSeason(1) - SeasonOffset(5) = -4, which ResolveShowEpisode must
+        // reject and keep scanning rather than matching (or crashing on) a negative season.
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "Old.Show.Name", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "Old.Show.Name.S01E01.mkv"), new byte[1024]);
+
+        int episodeId;
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+            var successor = TestData.NewShow("New Show Name", wanted: true, folderName: "New.Show.Name");
+            var ep = TestData.NewEpisode(successor, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(successor);
+            ctx.SaveChanges();
+            ctx.ShowFolderAliases.Add(new ShowFolderAlias { ShowId = successor.Id, AliasName = "Old.Show.Name", SeasonOffset = 5 });
+            ctx.SaveChanges();
+            episodeId = ep.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ShowDownloadedJob());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.False(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
+    public async Task ShowDownloadedJob_SwallowsAndLogs_WhenAFriendCopyFails()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "My.Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S01E01.mkv"), new byte[1024]);
+
+        var friendFolder = Path.Combine(_tempRoot, "FriendFolder");
+        // Pre-create a FILE at the exact path the code needs as a DIRECTORY (friend/Show/Season 1),
+        // so Directory.CreateDirectory(destDir) throws IOException and is caught per-file.
+        Directory.CreateDirectory(friendFolder);
+        File.WriteAllBytes(Path.Combine(friendFolder, "My.Show"), new byte[] { 0 });
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+            var show = TestData.NewShow("My Show", wanted: true, folderName: "My.Show");
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+
+            var friend = new Friend { Name = "Alice", FolderPath = friendFolder };
+            ctx.Friends.Add(friend);
+            ctx.SaveChanges();
+            ctx.FriendShows.Add(new FriendShow { FriendId = friend.Id, ShowId = show.Id });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ShowDownloadedJob());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.Empty(verify.FriendCopies);
+    }
+
+    [Fact]
+    public async Task ScanDirectoryFull_UpdatesExistingTouchFile_WhenWasRealFileFlagChanges()
+    {
+        using var db = new TestDb();
+        var scanDir = Path.Combine(_tempRoot, "ScanMe");
+        var showFolder = Path.Combine(scanDir, "My.Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S01E01.mkv"), new byte[1024]);
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TouchFiles.Add(new TouchFile { Name = "My.Show.S01E01.mkv", WasRealFile = false, FileDate = DateTime.UtcNow });
+            var show = TestData.NewShow("My Show", wanted: true, folderName: "My.Show");
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ScanDirectoryFull(scanDir));
+        }
+
+        using var verify = db.CreateContext();
+        Assert.True(verify.TouchFiles.Single(t => t.Name == "My.Show.S01E01.mkv").WasRealFile);
+    }
+
+    [Fact]
+    public async Task ScanDirectoryFull_StillMarksEpisodeWatched_WhenNotificationSendFails()
+    {
+        using var db = new TestDb();
+        var scanDir = Path.Combine(_tempRoot, "ScanMe");
+        var showFolder = Path.Combine(scanDir, "My.Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S01E01.mkv"), new byte[1024]);
+
+        int episodeId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("My Show", wanted: true, folderName: "My.Show");
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            episodeId = ep.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = new ShowListBackgroundService(
+                ctx,
+                NullLogger<ShowListBackgroundService>.Instance,
+                Options.Create(TestFactory.Options()),
+                new ThrowingNotificationService());
+            Assert.True(await service.ScanDirectoryFull(scanDir));
+        }
+
+        using var verify = db.CreateContext();
+        Assert.True(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
+    public async Task ShowDownloadedJob_SwallowsAndLogs_WhenAConfiguredTvDirectoryDoesNotExist()
+    {
+        // Dirlist's own try/catch (Directory.GetFiles on a missing path) rather than the outer
+        // ShowDownloadedJob scan catch, since the directory Name itself is valid (non-null).
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        ctx.TVDirectories.Add(new TVDirectories
+        {
+            Name = Path.Combine(_tempRoot, "does-not-exist"),
+            DaysToScan = -1,
+            MinFileSize = 0,
+            Filter = "*.*"
+        });
+        ctx.SaveChanges();
+
+        var service = TestFactory.CreateBackgroundService(ctx);
+        Assert.True(await service.ShowDownloadedJob());
+    }
+
+    [Fact]
     public async Task ShowDownloadedJob_CopiesNewFileToInterestedFriendsFolder()
     {
         using var db = new TestDb();
@@ -216,6 +371,167 @@ public class ShowListBackgroundServiceTests : IDisposable
         var result = await service.ResolveAliasFolders();
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public async Task ResolveAliasFolders_NoOp_WhenNoAliasesAreDefined()
+    {
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        ctx.TVDirectories.Add(new TVDirectories { Name = _tempRoot, Aliasable = true, DaysToScan = 0 });
+        ctx.SaveChanges();
+
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        Assert.True(await service.ResolveAliasFolders());
+    }
+
+    [Fact]
+    public async Task ResolveAliasFolders_SkipsDirectory_WhenConfiguredPathDoesNotExist()
+    {
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        ctx.TVDirectories.Add(new TVDirectories { Name = Path.Combine(_tempRoot, "does-not-exist"), Aliasable = true, DaysToScan = 0 });
+        var show = TestData.NewShow("New Show Name", wanted: true, folderName: "New.Show.Name");
+        ctx.Shows.Add(show);
+        ctx.SaveChanges();
+        ctx.ShowFolderAliases.Add(new ShowFolderAlias { ShowId = show.Id, AliasName = "Old.Show.Name", SeasonOffset = 0 });
+        ctx.SaveChanges();
+
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        Assert.True(await service.ResolveAliasFolders());
+    }
+
+    [Fact]
+    public async Task ResolveAliasFolders_LogsAndContinues_WhenAnAliasFailsToResolve()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        Directory.CreateDirectory(tvDir);
+        Directory.CreateDirectory(Path.Combine(tvDir, "Old.Show.Name"));
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, Aliasable = true, DaysToScan = 0 });
+            // A colon is an invalid Windows path character - Directory.CreateDirectory(realPath)
+            // throws, exercising the per-alias catch without aborting the whole run.
+            var show = TestData.NewShow("Bad Name", wanted: true, folderName: "Bad:Name");
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            ctx.ShowFolderAliases.Add(new ShowFolderAlias { ShowId = show.Id, AliasName = "Old.Show.Name", SeasonOffset = 0 });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ResolveAliasFolders());
+        }
+
+        // The alias folder is left untouched since the merge attempt failed.
+        Assert.True(Directory.Exists(Path.Combine(tvDir, "Old.Show.Name")));
+    }
+
+    [Fact]
+    public async Task ResolveAliasFolders_SkipsConflictingFile_AndLeavesAliasFolderInPlace()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var aliasFolder = Path.Combine(tvDir, "Old.Show.Name");
+        var realFolder = Path.Combine(tvDir, "New.Show.Name");
+        Directory.CreateDirectory(aliasFolder);
+        Directory.CreateDirectory(realFolder);
+        // Same file name already present at the destination - MergeDirectory must skip it rather
+        // than overwrite, which also leaves the alias folder non-empty (so it isn't deleted).
+        File.WriteAllBytes(Path.Combine(aliasFolder, "dupe.txt"), new byte[] { 1 });
+        File.WriteAllBytes(Path.Combine(realFolder, "dupe.txt"), new byte[] { 2 });
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, Aliasable = true, DaysToScan = 0 });
+            var show = TestData.NewShow("New Show Name", wanted: true, folderName: "New.Show.Name");
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            ctx.ShowFolderAliases.Add(new ShowFolderAlias { ShowId = show.Id, AliasName = "Old.Show.Name", SeasonOffset = 0 });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ResolveAliasFolders());
+        }
+
+        Assert.True(Directory.Exists(aliasFolder)); // not deleted - the conflicting file is still there
+        Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(Path.Combine(realFolder, "dupe.txt"))); // untouched
+    }
+
+    [Fact]
+    public async Task ResolveAliasFolders_SkipsSeasonFolder_WhenOffsetProducesInvalidSeasonNumber()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var aliasFolder = Path.Combine(tvDir, "Old.Show.Name");
+        var aliasSeason1 = Path.Combine(aliasFolder, "Season 1");
+        Directory.CreateDirectory(aliasSeason1);
+        File.WriteAllBytes(Path.Combine(aliasSeason1, "episode.mkv"), new byte[10]);
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, Aliasable = true, DaysToScan = 0 });
+            var show = TestData.NewShow("New Show Name", wanted: true, folderName: "New.Show.Name");
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            // Offset(5) applied to Season 1 -> mapped season -4, which is invalid and must be skipped.
+            ctx.ShowFolderAliases.Add(new ShowFolderAlias { ShowId = show.Id, AliasName = "Old.Show.Name", SeasonOffset = 5 });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ResolveAliasFolders());
+        }
+
+        // "Season 1" was skipped (never moved), which also leaves the alias folder non-empty.
+        Assert.True(Directory.Exists(aliasSeason1));
+        Assert.True(File.Exists(Path.Combine(aliasSeason1, "episode.mkv")));
+    }
+
+    [Fact]
+    public async Task ResolveAliasFolders_RecursivelyMerges_WhenSeasonFolderAlreadyExistsAtDestination()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var aliasFolder = Path.Combine(tvDir, "Old.Show.Name");
+        var realFolder = Path.Combine(tvDir, "New.Show.Name");
+        var aliasSeason1 = Path.Combine(aliasFolder, "Season 1");
+        var realSeason1 = Path.Combine(realFolder, "Season 1");
+        Directory.CreateDirectory(aliasSeason1);
+        Directory.CreateDirectory(realSeason1);
+        File.WriteAllBytes(Path.Combine(aliasSeason1, "from-alias.mkv"), new byte[10]);
+        File.WriteAllBytes(Path.Combine(realSeason1, "already-there.mkv"), new byte[10]);
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, Aliasable = true, DaysToScan = 0 });
+            var show = TestData.NewShow("New Show Name", wanted: true, folderName: "New.Show.Name");
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            ctx.ShowFolderAliases.Add(new ShowFolderAlias { ShowId = show.Id, AliasName = "Old.Show.Name", SeasonOffset = 0 });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ResolveAliasFolders());
+        }
+
+        Assert.False(Directory.Exists(aliasFolder)); // fully merged away
+        Assert.True(File.Exists(Path.Combine(realSeason1, "from-alias.mkv")));
+        Assert.True(File.Exists(Path.Combine(realSeason1, "already-there.mkv")));
     }
 
     [Fact]
