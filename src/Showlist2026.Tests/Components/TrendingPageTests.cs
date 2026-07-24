@@ -28,6 +28,20 @@ public class TrendingPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void RendersDefaultStatusBadge_ForAnUnrecognisedStatus()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new object[]
+        {
+            new { show = new { id = 1, name = "Show A", type = (string?)null, network = (object?)null, image = (object?)null, status = "In Development" } },
+        });
+
+        var cut = Render<Trending>();
+
+        Assert.Contains("bg-light text-dark\">In Development", cut.Markup);
+    }
+
+    [Fact]
     public void RendersLinkToShowDetail_ForAlreadyTrackedShow()
     {
         using var httpTest = new HttpTest();

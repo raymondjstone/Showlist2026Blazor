@@ -55,6 +55,63 @@ public class UndecidedPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void ClickingEachFilterButton_PersistsThroughRealService()
+    {
+        int typeId, languageId, networkId, webNetworkId, networkCountryId, genreTextId;
+        using (var ctx = Db.CreateContext())
+        {
+            var type = TestData.NewType("Scripted");
+            var language = TestData.NewLanguage("English");
+            var country = TestData.NewCountry("US");
+            var network = TestData.NewNetwork("AMC", country: country);
+            var webNetwork = TestData.NewWebNetwork("Netflix");
+            var genretext = TestData.NewGenreText("Drama");
+            var show = TestData.NewShow("Undecided Show",
+                type: type, language: language, network: network, webNetwork: webNetwork);
+            show.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genretext, show = show } };
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            typeId = type.Id;
+            languageId = language.Id;
+            networkId = network.Id;
+            webNetworkId = webNetwork.Id;
+            networkCountryId = country.Id;
+            genreTextId = genretext.Id;
+        }
+
+        var cut = Render<Undecided>();
+        cut.Find("i[title='Select type']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Types.Find(typeId)!.Wanted);
+
+        cut = Render<Undecided>();
+        cut.Find("i[title='Select language']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Languages.Find(languageId)!.Wanted);
+
+        cut = Render<Undecided>();
+        cut.Find("i[title='Select network']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Networks.Find(networkId)!.Wanted);
+
+        cut = Render<Undecided>();
+        cut.Find("i[title='Select country']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Countrys.Find(networkCountryId)!.Wanted);
+
+        cut = Render<Undecided>();
+        cut.Find("i[title='Select webnetwork']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.WebNetworks.Find(webNetworkId)!.Wanted);
+
+        cut = Render<Undecided>();
+        cut.Find("i[title='Select genre']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.GenreTexts.Find(genreTextId)!.Wanted);
+    }
+
+    [Fact]
     public void SwitchingTabs_ShowsShowsFromTheSelectedYear()
     {
         using (var ctx = Db.CreateContext())

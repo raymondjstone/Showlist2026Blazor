@@ -19,6 +19,18 @@ public class DedupePageTests : BlazorTestBase
     }
 
     [Fact]
+    public async Task DismissingTheStatusMessage_HidesTheAlert()
+    {
+        var cut = Render<Dedupe>();
+        await cut.Find("button.btn-primary").ClickAsync(new());
+        Assert.Contains("Scan complete.", cut.Markup);
+
+        cut.Find("button.btn-close").Click();
+
+        Assert.DoesNotContain("Scan complete.", cut.Markup);
+    }
+
+    [Fact]
     public async Task DuplicateEpisodeFiles_AreFoundAndCanBeDeleted()
     {
         var basePath = Path.Combine(Path.GetTempPath(), "Showlist2026Tests_Dedupe_" + Guid.NewGuid());

@@ -64,6 +64,43 @@ public class CalendarPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void PreviousInWeekView_NavigatesToPriorWeek()
+    {
+        var cut = Render<Calendar>();
+        var initialHeader = cut.Find("h4.mb-0").TextContent.Trim();
+
+        var previousButton = cut.FindAll("button.btn-outline-secondary")
+            .First(b => b.QuerySelector("i.fa-chevron-left") != null);
+        previousButton.Click();
+
+        Assert.NotEqual(initialHeader, cut.Find("h4.mb-0").TextContent.Trim());
+    }
+
+    [Fact]
+    public void NextInMonthView_NavigatesToNextMonth()
+    {
+        var cut = Render<Calendar>();
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Month").Click();
+
+        var nextButton = cut.FindAll("button.btn-outline-secondary")
+            .First(b => b.QuerySelector("i.fa-chevron-right") != null);
+        nextButton.Click();
+
+        Assert.Contains(DateTime.Now.AddMonths(1).ToString("MMMM yyyy"), cut.Markup);
+    }
+
+    [Fact]
+    public void SwitchingBackToWeekView_FromMonthView_RecomputesWeekStart()
+    {
+        var cut = Render<Calendar>();
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Month").Click();
+
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Week").Click();
+
+        Assert.DoesNotContain("spinner-border", cut.Markup);
+    }
+
+    [Fact]
     public void JumpingToADate_NavigatesToThatWeek()
     {
         var cut = Render<Calendar>();
@@ -81,7 +118,8 @@ public class CalendarPageTests : BlazorTestBase
             for (int i = 1; i <= 5; i++)
             {
                 var show = TestData.NewShow($"Show {i}", wanted: true);
-                TestData.NewEpisode(show, 1, 1, DateTimeOffset.Now);
+                var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.Now, name: $"Episode {i}");
+                ep.airtime = "8:00 PM";
                 ctx.Shows.Add(show);
             }
             ctx.SaveChanges();
@@ -95,6 +133,8 @@ public class CalendarPageTests : BlazorTestBase
 
         Assert.Contains("modal-title", cut.Markup);
         Assert.Contains("Show 1", cut.Markup);
+        Assert.Contains("Episode 1", cut.Markup);
+        Assert.Contains("8:00 PM", cut.Markup);
 
         cut.Find("button.btn-close").Click();
 
