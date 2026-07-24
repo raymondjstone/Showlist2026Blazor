@@ -194,6 +194,164 @@ public class ShowListBackgroundServiceHttpTests
     }
 
     [Fact]
+    public async Task RefreshShowPage_SingleArgOverload_DelegatesToSamePageForFromAndTo()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(Array.Empty<object>());
+
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        Assert.True(await service.RefreshShowPage(2));
+        httpTest.ShouldHaveCalled("*/shows?page=2");
+    }
+
+    [Fact]
+    public async Task RefreshShowPage_TreatsPageAsEmpty_WhenTvMazeRequestFails()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith("server error", 500);
+
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        Assert.True(await service.RefreshShowPage(0, 0));
+        Assert.Empty(ctx.Shows);
+    }
+
+    [Fact]
+    public async Task RefreshShowPage_UsesPlaceholders_WhenNetworkAndWebChannelAreMissing()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new[]
+        {
+            new
+            {
+                id = 43,
+                name = "Web-Only New Show",
+                status = "Running",
+                updated = 1700000000,
+                weight = 0,
+                genres = Array.Empty<string>(),
+                type = "Scripted",
+                language = "English",
+            }
+        });
+        httpTest.RespondWithJson(Array.Empty<object>()); // episodes fetch
+
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        Assert.True(await service.RefreshShowPage(0, 0));
+
+        var show = ctx.Shows.Single(s => s.showid == 43);
+        Assert.Equal("Web-Only New Show", show.name);
+    }
+
+    [Fact]
+    public async Task RefreshShowPage_LooksUpTimezoneByCountryCode_WhenTvMazeOmitsIt()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new[]
+        {
+            new
+            {
+                id = 44,
+                name = "Matched Timezone Show",
+                status = "Running",
+                updated = 1700000000,
+                weight = 0,
+                network = new { id = 20, name = "Matched Net", country = new { name = "United States", code = "US" } },
+                webChannel = new { id = 21, name = "Unmatched Web", country = new { name = "Nowhere", code = "ZZ" } },
+                genres = Array.Empty<string>(),
+                type = "Scripted",
+                language = "English",
+            }
+        });
+        httpTest.RespondWithJson(Array.Empty<object>()); // episodes fetch
+
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            // Matches the network's country code directly (skips the "Unknown" fallback lookup).
+            ctx.Timezones.Add(new Showlist2026.Entities.Timezone { countrycode = "US", timezone = "America/New_York" });
+            // No entry for "ZZ" - forces the webChannel side through the "Unknown" fallback lookup.
+            ctx.Timezones.Add(new Showlist2026.Entities.Timezone { countrycode = "??", timezone = "Unknown" });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.RefreshShowPage(0, 0));
+        }
+
+        using var verify = db.CreateContext();
+        var show = verify.Shows
+            .Include(s => s.Networks)
+            .Include(s => s.WebNetworks)
+            .Single(s => s.showid == 44);
+        Assert.Equal("America/New_York", show.Networks!.timezone);
+        Assert.Equal("Unknown", show.WebNetworks!.timezone);
+    }
+
+    [Fact]
+    public async Task RefreshShowPage_RemovesOldGenres_AndMatchesExistingGenreEntity_ForShowAlreadyNeedingUpdate()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new[]
+        {
+            new
+            {
+                id = 555,
+                name = "Updated Via Page",
+                status = "Running",
+                updated = 1700000000,
+                weight = 0,
+                network = new { id = 9, name = "HBO", country = new { name = "United States", code = "US", timezone = "America/New_York" } },
+                genres = new[] { "Drama" },
+                type = "Scripted",
+                language = "English",
+            }
+        });
+        httpTest.RespondWithJson(Array.Empty<object>()); // episodes fetch
+
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("Old Name", showid: 555);
+            show.page = 0;
+            show.needsupdate = true;
+            show.Genres = new List<Showlist2026.Entities.Genre>
+            {
+                new() { genretext = new Showlist2026.Entities.GenreText { genre = "Old Genre" }, show = show }
+            };
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.RefreshShowPage(0, 0));
+        }
+
+        using var verify = db.CreateContext();
+        var updated = verify.Shows
+            .Include(s => s.Genres).ThenInclude(g => g.genretext)
+            .Single(s => s.Id == showId);
+        Assert.Equal("Updated Via Page", updated.name);
+        Assert.Single(updated.Genres!);
+        Assert.Equal("Drama", updated.Genres!.Single().genretext!.genre);
+        Assert.False(updated.needsupdate);
+    }
+
+    [Fact]
     public async Task RefreshShows_UpdatesExistingShowNeedingUpdate_FromTvMazeResponse()
     {
         using var httpTest = new HttpTest();
@@ -476,9 +634,10 @@ public class ShowListBackgroundServiceHttpTests
         using var httpTest = new HttpTest();
         httpTest.RespondWithJson(new[]
         {
-            // AddMinutes(23:59 -> 1439 minutes) on the last representable instant overflows
+            // Airtime is split as "HH:MM" with no bounds checking, so "48:00" contributes 2880
+            // minutes (2 days) - added to the last representable date, AddMinutes overflows
             // DateTimeOffset's range and throws inside the inner airtime-adjustment try/catch.
-            new { id = 3003, name = "Overflow Ep", season = 1, number = 1, airdate = "9999-12-31", airtime = "23:59" }
+            new { id = 3003, name = "Overflow Ep", season = 1, number = 1, airdate = "9999-12-31", airtime = "48:00" }
         });
 
         using var db = new TestDb();
