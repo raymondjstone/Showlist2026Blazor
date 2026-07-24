@@ -22,6 +22,8 @@ namespace Showlist2026.Services
         private readonly ShowlistOptions _options;
         private readonly INotificationService _notifications;
 
+        private const string CrawlUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+
 
         public ShowListAppService(IDbContextFactory<ShowlistDbContext> dbFactory, ILogger<ShowListAppService> logger,
             IOptions<ShowlistOptions> options, INotificationService notifications)
@@ -2573,10 +2575,6 @@ namespace Showlist2026.Services
                 return summary;
             }
 
-            var httpClient = new HttpClient();
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-            httpClient.Timeout = TimeSpan.FromSeconds(30);
-
             foreach (var site in sites)
             {
                 if (string.IsNullOrEmpty(site.URLTemplate)) continue;
@@ -2592,7 +2590,7 @@ namespace Showlist2026.Services
                     // Check if site has API key configured - use Newznab API if available
                     if (!string.IsNullOrEmpty(site.ApiKey))
                     {
-                        var apiResults = await CrawlWithNewznabApi(httpClient, site, show, unwatchedEpisodes, crawledInfo, summary);
+                        var apiResults = await CrawlWithNewznabApi(site, show, unwatchedEpisodes, crawledInfo, summary);
                         summary.Results.AddRange(apiResults);
                         summary.CrawledUrls.Add(crawledInfo);
                         if (crawledInfo.Success) summary.SitesCrawled++;
@@ -2607,19 +2605,23 @@ namespace Showlist2026.Services
 
                     crawledInfo.Url = searchUrl;
 
-                    var response = await httpClient.GetAsync(searchUrl);
-                    crawledInfo.HttpStatus = (int)response.StatusCode;
+                    var response = await searchUrl
+                        .WithHeader("User-Agent", CrawlUserAgent)
+                        .WithTimeout(30)
+                        .AllowAnyHttpStatus()
+                        .GetAsync();
+                    crawledInfo.HttpStatus = response.StatusCode;
 
-                    if (!response.IsSuccessStatusCode)
+                    if (response.StatusCode < 200 || response.StatusCode >= 300)
                     {
                         crawledInfo.Success = false;
-                        crawledInfo.ErrorMessage = $"HTTP {(int)response.StatusCode}";
-                        summary.Errors.Add($"{site.Name}: HTTP {(int)response.StatusCode}");
+                        crawledInfo.ErrorMessage = $"HTTP {response.StatusCode}";
+                        summary.Errors.Add($"{site.Name}: HTTP {response.StatusCode}");
                         summary.CrawledUrls.Add(crawledInfo);
                         continue;
                     }
 
-                    var html = await response.Content.ReadAsStringAsync();
+                    var html = await response.GetStringAsync();
                     crawledInfo.Success = true;
                     summary.SitesCrawled++;
 
@@ -2629,7 +2631,7 @@ namespace Showlist2026.Services
                     summary.Results.AddRange(results);
                     summary.DebugInfo.AddRange(debugInfo);
                 }
-                catch (TaskCanceledException)
+                catch (FlurlHttpTimeoutException)
                 {
                     crawledInfo.Success = false;
                     crawledInfo.ErrorMessage = "Timeout";
@@ -2665,7 +2667,6 @@ namespace Showlist2026.Services
         /// This is the preferred method as it doesn't require browser authentication.
         /// </summary>
         private async Task<List<NzbSiteCrawlResult>> CrawlWithNewznabApi(
-            HttpClient httpClient,
             TVSite site,
             Show show,
             List<Episode> unwatchedEpisodes,
@@ -2707,18 +2708,22 @@ namespace Showlist2026.Services
 
             try
             {
-                var response = await httpClient.GetAsync(apiUrl);
-                crawledInfo.HttpStatus = (int)response.StatusCode;
+                var response = await apiUrl
+                    .WithHeader("User-Agent", CrawlUserAgent)
+                    .WithTimeout(30)
+                    .AllowAnyHttpStatus()
+                    .GetAsync();
+                crawledInfo.HttpStatus = response.StatusCode;
 
-                if (!response.IsSuccessStatusCode)
+                if (response.StatusCode < 200 || response.StatusCode >= 300)
                 {
                     crawledInfo.Success = false;
-                    crawledInfo.ErrorMessage = $"HTTP {(int)response.StatusCode}";
-                    summary.DebugInfo.Add($"[{site.Name}] API: HTTP {(int)response.StatusCode}");
+                    crawledInfo.ErrorMessage = $"HTTP {response.StatusCode}";
+                    summary.DebugInfo.Add($"[{site.Name}] API: HTTP {response.StatusCode}");
                     return results;
                 }
 
-                var xml = await response.Content.ReadAsStringAsync();
+                var xml = await response.GetStringAsync();
                 crawledInfo.Success = true;
 
                 // Parse Newznab XML response
@@ -3202,10 +3207,6 @@ namespace Showlist2026.Services
                 return summary;
             }
 
-            var httpClient = new HttpClient();
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-            httpClient.Timeout = TimeSpan.FromSeconds(30);
-
             foreach (var site in sites)
             {
                 var crawledInfo = new CrawledSiteInfo
@@ -3216,12 +3217,12 @@ namespace Showlist2026.Services
 
                 try
                 {
-                    var rssResults = await CrawlWithRssFeed(httpClient, site, show, unwatchedEpisodes, crawledInfo, summary);
+                    var rssResults = await CrawlWithRssFeed(site, show, unwatchedEpisodes, crawledInfo, summary);
                     summary.Results.AddRange(rssResults);
                     summary.CrawledUrls.Add(crawledInfo);
                     if (crawledInfo.Success) summary.SitesCrawled++;
                 }
-                catch (TaskCanceledException)
+                catch (FlurlHttpTimeoutException)
                 {
                     crawledInfo.Success = false;
                     crawledInfo.ErrorMessage = "Timeout";
@@ -3257,7 +3258,6 @@ namespace Showlist2026.Services
         /// Most Newznab-compatible sites support RSS feeds at /rss or /api?t=search&dl=1
         /// </summary>
         private async Task<List<NzbSiteCrawlResult>> CrawlWithRssFeed(
-            HttpClient httpClient,
             TVSite site,
             Show show,
             List<Episode> unwatchedEpisodes,
@@ -3303,18 +3303,22 @@ namespace Showlist2026.Services
 
             try
             {
-                var response = await httpClient.GetAsync(rssUrl);
-                crawledInfo.HttpStatus = (int)response.StatusCode;
+                var response = await rssUrl
+                    .WithHeader("User-Agent", CrawlUserAgent)
+                    .WithTimeout(30)
+                    .AllowAnyHttpStatus()
+                    .GetAsync();
+                crawledInfo.HttpStatus = response.StatusCode;
 
-                if (!response.IsSuccessStatusCode)
+                if (response.StatusCode < 200 || response.StatusCode >= 300)
                 {
                     crawledInfo.Success = false;
-                    crawledInfo.ErrorMessage = $"HTTP {(int)response.StatusCode}";
-                    summary.DebugInfo.Add($"[{site.Name}] RSS: HTTP {(int)response.StatusCode}");
+                    crawledInfo.ErrorMessage = $"HTTP {response.StatusCode}";
+                    summary.DebugInfo.Add($"[{site.Name}] RSS: HTTP {response.StatusCode}");
                     return results;
                 }
 
-                var xml = await response.Content.ReadAsStringAsync();
+                var xml = await response.GetStringAsync();
                 crawledInfo.Success = true;
 
                 // Parse RSS/Newznab XML response - reuse the existing parser
