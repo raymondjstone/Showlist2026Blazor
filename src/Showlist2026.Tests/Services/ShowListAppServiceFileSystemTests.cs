@@ -79,6 +79,28 @@ public class ShowListAppServiceFileSystemTests : IDisposable
     }
 
     [Fact]
+    public void DeleteFile_SkipsMalformedConfiguredDirectory_WhenComputingAllowedRoots()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        Directory.CreateDirectory(tvDir);
+        using (var ctx = db.CreateContext())
+        {
+            // A NUL character makes Path.GetFullPath throw while normalising allowed roots -
+            // that one bad entry must be skipped rather than failing the whole allow-list.
+            ctx.TVDirectories.Add(new TVDirectories { Name = "bad\0dir", DaysToScan = 1 });
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = 1 });
+            ctx.SaveChanges();
+        }
+
+        var insideFile = Path.Combine(tvDir, "episode.mkv");
+        File.WriteAllText(insideFile, "video data");
+
+        var service = TestFactory.CreateAppService(db);
+        Assert.True(service.DeleteFile(insideFile));
+    }
+
+    [Fact]
     public void FindExistingFolders_MatchesFolderByNameAndYearVariant()
     {
         // FindExistingFolders derives the "(year)" variant FROM an already year-suffixed folder
@@ -297,6 +319,34 @@ public class ShowListAppServiceFileSystemTests : IDisposable
         // Larger file first (ThenByDescending FileSize)
         Assert.Equal(2000, duplicates[0].FileSize);
         Assert.Equal(1000, duplicates[1].FileSize);
+    }
+
+    [Fact]
+    public void FindDuplicateEpisodeFiles_SkipsMissingDirectory_AndFallsBackToShowNameMatch()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        // Folder is named after the show's `name`, not its FolderName - exercises the
+        // FolderName-lookup-miss -> name-lookup fallback branch.
+        var showFolder = Path.Combine(tvDir, "My Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S01E01.720p.mkv"), new byte[1000]);
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S01E01.1080p.mkv"), new byte[2000]);
+
+        using (var ctx = db.CreateContext())
+        {
+            // Missing/nonexistent directory entry - must be skipped, not thrown on.
+            ctx.TVDirectories.Add(new TVDirectories { Name = Path.Combine(_tempRoot, "does-not-exist"), DaysToScan = 1, Filter = "*.*" });
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = 1, Filter = "*.*" });
+            ctx.Shows.Add(TestData.NewShow("My Show", wanted: true)); // no FolderName set
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var duplicates = service.FindDuplicateEpisodeFiles();
+
+        Assert.Equal(2, duplicates.Count);
+        Assert.All(duplicates, d => Assert.Equal("My Show", d.ShowName));
     }
 
     [Fact]

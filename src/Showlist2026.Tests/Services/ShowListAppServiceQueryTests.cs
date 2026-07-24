@@ -165,6 +165,35 @@ public class ShowListAppServiceQueryTests
     }
 
     [Fact]
+    public void UndecidedShows_ExcludesShowByGenre_AndAttachesGenres_ToEligibleShow()
+    {
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            var excludedGenre = TestData.NewGenreText("Reality", wanted: false);
+            var genreFiltered = TestData.NewShow("Genre Filtered");
+            genreFiltered.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = excludedGenre, show = genreFiltered } };
+            TestData.NewEpisode(genreFiltered, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+
+            var dramaGenre = TestData.NewGenreText("Drama");
+            var eligible = TestData.NewShow("Eligible With Genre");
+            eligible.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = dramaGenre, show = eligible } };
+            TestData.NewEpisode(eligible, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+
+            ctx.Shows.AddRange(genreFiltered, eligible);
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var results = service.UndecidedShows();
+
+        Assert.DoesNotContain(results, r => r.ep.show!.name == "Genre Filtered");
+        var result = Assert.Single(results);
+        Assert.Equal("Eligible With Genre", result.ep.show!.name);
+        Assert.Contains(result.ep.show.Genres!, g => g.genretext!.genre == "Drama");
+    }
+
+    [Fact]
     public void UndecidedShows_ReturnsEligibleShow_WithFirstAndLastEpisodeAttached()
     {
         // Regression coverage: UndecidedShows() used to load its "latest episode per show" via
@@ -253,6 +282,8 @@ public class ShowListAppServiceQueryTests
         using (var ctx = db.CreateContext())
         {
             var show = TestData.NewShow("Show", wanted: true, priority: 5);
+            var dramaGenre = TestData.NewGenreText("Drama");
+            show.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = dramaGenre, show = show } };
             TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-10), watched: true);
             TestData.NewEpisode(show, 1, 2, DateTimeOffset.UtcNow.AddDays(-9)); // earliest unwatched
             TestData.NewEpisode(show, 1, 3, DateTimeOffset.UtcNow.AddDays(-8), givenUp: true);
@@ -274,6 +305,7 @@ public class ShowListAppServiceQueryTests
         Assert.Equal(2, result.TotalWatchedEpisodes);
         Assert.Equal(1, result.TotalGivenUpEpisodes);
         Assert.Equal(5, result.ShowPriority);
+        Assert.Contains(result.ep.show!.Genres!, g => g.genretext!.genre == "Drama");
     }
 
     [Fact]
@@ -312,7 +344,13 @@ public class ShowListAppServiceQueryTests
             var byWebCountry = TestData.NewShow("By WebCountry", webNetwork: TestData.NewWebNetwork("Hulu", country: webCountry));
             TestData.NewEpisode(byWebCountry, 1, 1, DateTimeOffset.UtcNow);
 
-            ctx.Shows.AddRange(byType, byNetwork, byWebNetwork, byLanguage, byGenre, byWebCountry);
+            // Networks.country decides it - the main-network-country branch, checked before the
+            // web-network-country one above.
+            var netCountry = new Showlist2026.Entities.Country { code = "FR", name = "FR", Wanted = true };
+            var byNetCountry = TestData.NewShow("By NetCountry", network: TestData.NewNetwork("Canal+", country: netCountry));
+            TestData.NewEpisode(byNetCountry, 1, 1, DateTimeOffset.UtcNow);
+
+            ctx.Shows.AddRange(byType, byNetwork, byWebNetwork, byLanguage, byGenre, byWebCountry, byNetCountry);
             ctx.SaveChanges();
         }
 
@@ -337,5 +375,9 @@ public class ShowListAppServiceQueryTests
 
         var byWebCountryResult = results.Single(r => r.ep.show!.name == "By WebCountry");
         Assert.True(byWebCountryResult.countryinclude);
+
+        var byNetCountryResult = results.Single(r => r.ep.show!.name == "By NetCountry");
+        Assert.True(byNetCountryResult.countryinclude);
+        Assert.True(byNetCountryResult.Activelyselected);
     }
 }

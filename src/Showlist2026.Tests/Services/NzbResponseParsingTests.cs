@@ -46,6 +46,25 @@ public class NzbResponseParsingTests
     }
 
     [Fact]
+    public void ParseNewznabResponse_MatchesAlternateNxNNEpisodeFormat()
+    {
+        var xml = """
+        <rss><channel>
+          <item><title>Show.Name.1x02.mkv</title><link>http://x/1</link></item>
+        </channel></rss>
+        """;
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+        var summary = new NzbSiteCrawlSummary();
+
+        var results = service.ParseNewznabResponse(xml, "MySite", "http://search", UnwatchedEpisode(1, 2), summary);
+
+        var result = Assert.Single(results);
+        Assert.Equal("S01E02", result.EpisodeCode);
+    }
+
+    [Fact]
     public void ParseNewznabResponse_SkipsEpisodesNotInUnwatchedList()
     {
         var xml = """
@@ -272,6 +291,99 @@ public class NzbResponseParsingTests
         var result = Assert.Single(results);
         Assert.Equal("S01E01", result.EpisodeCode);
         Assert.Equal("http://example.com/download/1", result.DownloadUrl);
+    }
+
+    [Fact]
+    public void ParseNzbSiteHtml_AnchorStrategy_LeavesDownloadUrlEmpty_WhenNoNearbyLinkMatchesDownloadKeywords()
+    {
+        // The matching anchor's own href doesn't contain get/download/cdn/api/.nzb, so none of
+        // the download-URL patterns match anywhere in the surrounding context.
+        var html = """<a href="http://example.com/watch/1">Show.Name.S01E01.720p</a>""";
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        var (results, _) = service.ParseNzbSiteHtml(html, "MySite", "http://search", UnwatchedEpisode(1, 1));
+
+        var result = Assert.Single(results);
+        Assert.Equal("S01E01", result.EpisodeCode);
+        Assert.Equal("", result.DownloadUrl);
+    }
+
+    [Fact]
+    public void ParseNzbSiteHtml_AnchorStrategy_SkipsDuplicateTitleFromSameSite()
+    {
+        var html = """
+        <a href="http://example.com/get/1">Show.Name.S01E01.720p</a>
+        <a href="http://example.com/get/2">Show.Name.S01E01.720p</a>
+        """;
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        var (results, _) = service.ParseNzbSiteHtml(html, "MySite", "http://search", UnwatchedEpisode(1, 1));
+
+        Assert.Single(results); // second anchor has an identical title, so it's deduplicated
+    }
+
+    [Fact]
+    public void ParseNzbSiteHtml_RowStrategy_TakesTitleFromAnchorTextContainingEpisodeCode()
+    {
+        var html = """
+        <html><body>
+          <table>
+            <tr><td><a href="http://example.com/download/1">Show.Name.S01E01.720p.WEB-DL</a></td></tr>
+          </table>
+        </body></html>
+        """;
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        var (results, _) = service.ParseNzbSiteHtml(html, "MySite", "http://search", UnwatchedEpisode(1, 1));
+
+        var result = Assert.Single(results);
+        Assert.Equal("Show.Name.S01E01.720p.WEB-DL", result.Title);
+    }
+
+    [Fact]
+    public void ParseNzbSiteHtml_RowStrategy_FallsBackToFirstUrl_WhenNoUrlMatchesDownloadKeywords()
+    {
+        var html = """
+        <html><body>
+          <table>
+            <tr><td>Show.Name.S01E01.720p</td><td><a href="http://example.com/details/1">Info</a></td></tr>
+          </table>
+        </body></html>
+        """;
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        var (results, _) = service.ParseNzbSiteHtml(html, "MySite", "http://search", UnwatchedEpisode(1, 1));
+
+        var result = Assert.Single(results);
+        Assert.Equal("http://example.com/details/1", result.DownloadUrl); // no keyword match -> first URL used
+    }
+
+    [Fact]
+    public void ParseNzbSiteHtml_RowStrategy_SkipsDuplicateTitleFromSameSite()
+    {
+        var html = """
+        <html><body>
+          <table>
+            <tr><td>Show.Name.S01E01.720p</td><td><a href="http://example.com/download/1">Download</a></td></tr>
+            <tr><td>Show.Name.S01E01.720p</td><td><a href="http://example.com/download/2">Download</a></td></tr>
+          </table>
+        </body></html>
+        """;
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        var (results, _) = service.ParseNzbSiteHtml(html, "MySite", "http://search", UnwatchedEpisode(1, 1));
+
+        Assert.Single(results); // second row's extracted title is identical, so it's deduplicated
     }
 
     [Fact]
