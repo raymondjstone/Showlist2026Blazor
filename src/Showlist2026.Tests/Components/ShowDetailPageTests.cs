@@ -443,6 +443,43 @@ public class ShowDetailPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void CrawlNzbSites_WithMatchingResult_RendersUrlsCrawledAndResultsTables()
+    {
+        using var httpTest = new Flurl.Http.Testing.HttpTest();
+        httpTest.RespondWith("""
+            <html><body>
+              <a href="http://example.com/download/1">Breaking.Bad.S01E03.720p</a>
+            </body></html>
+            """);
+
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad", wanted: true);
+            TestData.NewEpisode(show, 1, 3, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.TVSites.Add(new Showlist2026.Entities.TVSite
+            {
+                Name = "MySite", URLTemplate = "http://example.com/search?q={URLSearchTerm}", Active = true, Order = 1
+            });
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-outline-primary.btn-sm.ms-3").Click(); // Crawl API
+
+        Assert.Contains("Crawl Results: 1 found from 1 sites", cut.Markup);
+        Assert.Contains("URLs Crawled", cut.Markup);
+        Assert.Contains("MySite", cut.Markup);
+        Assert.Contains("http://example.com/download/1", cut.Markup);
+        Assert.Contains("bg-success\">200", cut.Markup);
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Clear")).Click();
+        Assert.DoesNotContain("Crawl Results", cut.Markup);
+    }
+
+    [Fact]
     public async Task AddingAliasWithSeasonOffset_ShowsMappingPreviewAndPersistedBadge()
     {
         var showId = SeedShowWithEpisodes();
