@@ -2,6 +2,7 @@ using Bunit;
 using Flurl.Http.Testing;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.Linq;
 using Showlist2026.Tests.TestInfrastructure;
 using Showlist2026.Web.Components.Pages;
@@ -167,6 +168,25 @@ public class AdminPageTests : BlazorTestBase
         Assert.Contains("Email test sent successfully", cut.Markup);
     }
 
+    private sealed class ThrowingTestChannelNotificationService : Showlist2026.Services.INotificationService
+    {
+        public Task SendAsync(string title, string message) => Task.CompletedTask;
+        public Task<(bool success, string error)> TestPushoverAsync() => throw new InvalidOperationException("pushover transport unavailable");
+        public Task<(bool success, string error)> TestDiscordAsync() => Task.FromResult((true, ""));
+        public Task<(bool success, string error)> TestEmailAsync() => Task.FromResult((true, ""));
+    }
+
+    [Fact]
+    public void TestPushover_ReportsFailure_WhenNotificationServiceThrows()
+    {
+        Services.AddSingleton<Showlist2026.Services.INotificationService>(new ThrowingTestChannelNotificationService());
+
+        var cut = Render<Admin>();
+        cut.FindAll("button.btn-outline-info").First(b => b.TextContent.Contains("Test Pushover")).Click();
+
+        Assert.Contains("Pushover test failed: pushover transport unavailable", cut.Markup);
+    }
+
     [Fact]
     public void ExportData_InvokesJavaScriptDownloadAndReportsSuccess()
     {
@@ -185,6 +205,28 @@ public class AdminPageTests : BlazorTestBase
 
         Assert.Contains("CSV export downloaded.", cut.Markup);
         Assert.Single(JSInterop.Invocations, inv => inv.Identifier == "eval");
+    }
+
+    [Fact]
+    public void ExportData_ReportsFailure_WhenJavaScriptInvocationThrows()
+    {
+        JSInterop.SetupVoid("eval", _ => true).SetException(new InvalidOperationException("JS interop unavailable"));
+
+        var cut = Render<Admin>();
+        cut.FindAll("button.btn-success").First(b => b.TextContent.Contains("Export User Data (JSON)")).Click();
+
+        Assert.Contains("Export failed:", cut.Markup);
+    }
+
+    [Fact]
+    public void ExportCsv_ReportsFailure_WhenJavaScriptInvocationThrows()
+    {
+        JSInterop.SetupVoid("eval", _ => true).SetException(new InvalidOperationException("JS interop unavailable"));
+
+        var cut = Render<Admin>();
+        cut.FindAll("button.btn-success").First(b => b.TextContent.Contains("Export User Data (CSV)")).Click();
+
+        Assert.Contains("CSV export failed:", cut.Markup);
     }
 
     [Fact]

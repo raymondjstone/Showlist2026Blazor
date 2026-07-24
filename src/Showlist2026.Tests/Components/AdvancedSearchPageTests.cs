@@ -75,6 +75,33 @@ public class AdvancedSearchPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void RendersAllFilterDropdownOptions_ForEveryLookupDimension()
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            var genretext = TestData.NewGenreText("Drama");
+            var country = TestData.NewCountry("FR", "France");
+            var type = TestData.NewType("Scripted");
+            var language = TestData.NewLanguage("French");
+            var show = TestData.NewShow("Filterable Show",
+                type: type, language: language,
+                network: TestData.NewNetwork("Canal+", country: country));
+            show.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genretext, show = show } };
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<AdvancedSearch>();
+
+        var options = cut.FindAll("option").Select(o => o.TextContent).ToList();
+        Assert.Contains("Drama", options);
+        Assert.Contains("Canal+", options);
+        Assert.Contains("French", options);
+        Assert.Contains("FR - France", options);
+        Assert.Contains("Scripted", options);
+    }
+
+    [Fact]
     public void SearchResults_PaginateAcrossMultiplePages()
     {
         using (var ctx = Db.CreateContext())
