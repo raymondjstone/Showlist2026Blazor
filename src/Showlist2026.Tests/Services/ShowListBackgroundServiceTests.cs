@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Showlist2026.Entities;
+using Showlist2026.Services;
 using Showlist2026.Tests.TestInfrastructure;
 using Xunit;
 
@@ -213,5 +216,159 @@ public class ShowListBackgroundServiceTests : IDisposable
         var result = await service.ResolveAliasFolders();
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public async Task ShowDownloadedJob_SwallowsAndLogs_WhenATvDirectoryEntryIsMalformed()
+    {
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        // A null Name blows up `tvdir.Name.Trim()` before any per-directory try/catch, which
+        // should be caught by the outer scan try/catch rather than failing the whole job.
+        ctx.TVDirectories.Add(new TVDirectories { Name = null, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+        ctx.SaveChanges();
+
+        var service = TestFactory.CreateBackgroundService(ctx);
+        Assert.True(await service.ShowDownloadedJob());
+    }
+
+    [Fact]
+    public async Task ShowDownloadedJob_UpdatesExistingTouchFile_WhenWasRealFileFlagChanges()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "My.Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        var videoFile = Path.Combine(showFolder, "My.Show.S01E01.mkv");
+        File.WriteAllBytes(videoFile, new byte[1024]); // real content this time, >200 bytes
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+            // Previously recorded as a placeholder/touch file (not "real").
+            ctx.TouchFiles.Add(new TouchFile { Name = "My.Show.S01E01.mkv", WasRealFile = false, FileDate = DateTime.UtcNow });
+            var show = TestData.NewShow("My Show", wanted: true, folderName: "My.Show");
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ShowDownloadedJob());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.True(verify.TouchFiles.Single(t => t.Name == "My.Show.S01E01.mkv").WasRealFile);
+    }
+
+    [Fact]
+    public async Task ShowDownloadedJob_LogsNoEpisodeMatch_WhenParsedSeasonEpisodeHasNoDbRow()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "My.Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        // Parses fine as S01E09, but no such episode exists in the DB for this show.
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S01E09.mkv"), new byte[1024]);
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+            var show = TestData.NewShow("My Show", wanted: true, folderName: "My.Show");
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ShowDownloadedJob());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.NotNull(verify.TouchFiles.SingleOrDefault(t => t.Name == "My.Show.S01E09.mkv"));
+        Assert.False(verify.Episodes.Single().Watched); // the only real episode is untouched
+    }
+
+    [Fact]
+    public async Task ShowDownloadedJob_LogsUnparseableFileName_ButStillRecordsTouchFile()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "My.Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "not-an-episode-name.mkv"), new byte[1024]);
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+            var show = TestData.NewShow("My Show", wanted: true, folderName: "My.Show");
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ShowDownloadedJob());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.NotNull(verify.TouchFiles.SingleOrDefault(t => t.Name == "not-an-episode-name.mkv"));
+    }
+
+    private sealed class ThrowingNotificationService : Showlist2026.Services.INotificationService
+    {
+        public Task SendAsync(string title, string message) => throw new InvalidOperationException("notification transport is down");
+        public Task<(bool success, string error)> TestPushoverAsync() => Task.FromResult((true, ""));
+        public Task<(bool success, string error)> TestDiscordAsync() => Task.FromResult((true, ""));
+        public Task<(bool success, string error)> TestEmailAsync() => Task.FromResult((true, ""));
+    }
+
+    [Fact]
+    public async Task ShowDownloadedJob_StillMarksEpisodeWatched_WhenNotificationSendFails()
+    {
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "My.Show", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "My.Show.S01E01.mkv"), new byte[1024]);
+
+        int episodeId;
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+            var show = TestData.NewShow("My Show", wanted: true, folderName: "My.Show");
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            episodeId = ep.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = new ShowListBackgroundService(
+                ctx,
+                NullLogger<ShowListBackgroundService>.Instance,
+                Options.Create(TestFactory.Options()),
+                new ThrowingNotificationService());
+            Assert.True(await service.ShowDownloadedJob());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.True(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
+    public async Task ScanDirectoryFull_Throws_WhenDirectoryPathIsBlank()
+    {
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ScanDirectoryFull("   "));
     }
 }

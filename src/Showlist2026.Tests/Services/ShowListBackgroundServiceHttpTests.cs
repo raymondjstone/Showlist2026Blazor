@@ -132,6 +132,20 @@ public class ShowListBackgroundServiceHttpTests
     }
 
     [Fact]
+    public async Task RefreshShowDates_SwallowsAndLogs_WhenTvMazeResponseIsUnparseable()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith("not valid json", 200);
+
+        using var db = new TestDb();
+        using var ctx = db.CreateContext();
+        var service = TestFactory.CreateBackgroundService(ctx);
+
+        Assert.True(await service.RefreshShowDates());
+        Assert.Empty(ctx.Shows);
+    }
+
+    [Fact]
     public async Task RefreshShowPage_CreatesNewShowWithEpisodes_FromTvMazeResponse()
     {
         using var httpTest = new HttpTest();
@@ -296,6 +310,46 @@ public class ShowListBackgroundServiceHttpTests
             .Single(s => s.showid == 44);
         Assert.Equal("America/New_York", show.Networks!.timezone);
         Assert.Equal("Unknown", show.WebNetworks!.timezone);
+    }
+
+    [Fact]
+    public async Task RefreshShowPage_FallsBackToUnknownTimezone_WhenNetworkCountryCodeIsUnmatched()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWithJson(new[]
+        {
+            new
+            {
+                id = 45,
+                name = "Unmatched Network Timezone Show",
+                status = "Running",
+                updated = 1700000000,
+                weight = 0,
+                network = new { id = 22, name = "Unmatched Net", country = new { name = "Nowhere", code = "ZZ" } },
+                genres = Array.Empty<string>(),
+                type = "Scripted",
+                language = "English",
+            }
+        });
+        httpTest.RespondWithJson(Array.Empty<object>()); // episodes fetch
+
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            // No entry for "ZZ" - forces the network side through the "Unknown" fallback lookup.
+            ctx.Timezones.Add(new Showlist2026.Entities.Timezone { countrycode = "??", timezone = "Unknown" });
+            ctx.SaveChanges();
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.RefreshShowPage(0, 0));
+        }
+
+        using var verify = db.CreateContext();
+        var show = verify.Shows.Include(s => s.Networks).Single(s => s.showid == 45);
+        Assert.Equal("Unknown", show.Networks!.timezone);
     }
 
     [Fact]
