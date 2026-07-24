@@ -27,6 +27,26 @@ public class ComingSoonPageTests : BlazorTestBase
         Assert.Contains("Coming Soon (1 shows)", cut.Markup);
     }
 
+    [Theory]
+    [InlineData("Ended", "bg-secondary")]
+    [InlineData("To Be Determined", "bg-warning text-dark")]
+    [InlineData("In Development", "bg-info")]
+    public void RendersStatusBadge_ForEveryStatusVariant(string status, string expectedClass)
+    {
+        var premiered = DateTime.UtcNow.AddDays(30).ToString("yyyy-MM-dd");
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Upcoming Show", premiered: premiered);
+            show.status = status;
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<ComingSoon>();
+
+        Assert.Contains($"{expectedClass} ms-2\">{status}", cut.Markup);
+    }
+
     [Fact]
     public void StatusFilter_NarrowsListToSelectedStatus()
     {

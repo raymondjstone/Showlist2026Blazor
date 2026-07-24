@@ -59,6 +59,23 @@ public class NoFolderPageTests : BlazorTestBase
         Assert.Contains("bg-success\">Running", cut.Markup);
     }
 
+    [Theory]
+    [InlineData("Ended", "bg-secondary")]
+    [InlineData("To Be Determined", "bg-warning text-dark")]
+    [InlineData("In Development", "bg-info")]
+    public void RendersStatusBadge_ForEveryStatusVariant(string status, string expectedClass)
+    {
+        using (var ctx = Db.CreateContext())
+        {
+            ctx.Shows.Add(TestData.NewShow("My Show", wanted: true, status: status));
+            ctx.SaveChanges();
+        }
+
+        var cut = Render<NoFolder>();
+
+        Assert.Contains($"{expectedClass}\">{status}", cut.Markup);
+    }
+
     [Fact]
     public void UsingCustomFolderName_OpensModalAndPersistsThroughRealService()
     {

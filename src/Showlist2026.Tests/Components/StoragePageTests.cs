@@ -73,7 +73,7 @@ public class StoragePageTests : BlazorTestBase
             {
                 ctx.TVDirectories.Add(new Showlist2026.Entities.TVDirectories { Name = basePath, DaysToScan = 7 });
                 ctx.Shows.Add(TestData.NewShow("Wanted Show", wanted: true, folderName: "Wanted Show", status: "Running"));
-                ctx.Shows.Add(TestData.NewShow("Excluded Show", wanted: false, folderName: "Excluded Show"));
+                ctx.Shows.Add(TestData.NewShow("Excluded Show", wanted: false, folderName: "Excluded Show", status: "Ended"));
                 ctx.SaveChanges();
             }
 
@@ -81,6 +81,7 @@ public class StoragePageTests : BlazorTestBase
 
             Assert.Contains("2.0 MB", cut.Markup);
             Assert.Contains("bg-success\">Running", cut.Markup);
+            Assert.Contains("bg-secondary\">Ended", cut.Markup);
 
             cut.FindAll("select.form-select-sm")[0].Change("unmatched");
             var rows = cut.FindAll("tbody tr");
