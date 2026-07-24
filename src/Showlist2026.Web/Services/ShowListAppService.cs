@@ -629,25 +629,31 @@ namespace Showlist2026.Services
             _logger.LogDebug($"PERF[UndecidedShows] Episodes loaded ({eps.Count}): {sw.ElapsedMilliseconds}ms");
 
             // Load the latest episode per show so the card can display first + last
-            // Use raw SQL for efficient per-group-max pattern
             var showIdsWithEps = eps.Where(e => e.show != null).Select(e => e.show.Id).Distinct().ToList();
             if (showIdsWithEps.Count > 0)
             {
-                var idsCsv = string.Join(",", showIdsWithEps);
-                var lastEps = _db.Episodes
-                    .FromSqlRaw($"SELECT e.* FROM Episode e INNER JOIN (SELECT showId, MAX(Id) AS MaxId FROM Episode WHERE showId IN ({idsCsv}) GROUP BY showId) m ON e.Id = m.MaxId")
+                // Two simple, portable queries (max-id-per-group, then load those rows) instead
+                // of a raw-SQL per-group-max join - GroupBy combined with a projection to the
+                // entity type doesn't translate reliably across providers, but each of these
+                // does on its own. The second query is deliberately AsNoTracking(): `_db` is
+                // shared for this whole method, and `eps` above is tracked with .show Included,
+                // so a *tracked* load here would trigger EF's automatic relationship fixup and
+                // silently duplicate episodes into show.Episodes on top of what this loop adds
+                // explicitly below.
+                var lastEpisodeByShowId = _db.Episodes
+                    .Where(e => e.show != null && showIdsWithEps.Contains(e.show.Id))
+                    .GroupBy(e => e.show.Id)
+                    .Select(g => new { ShowId = g.Key, LastEpisodeId = g.Max(e => e.Id) })
                     .ToList();
-                _logger.LogDebug($"PERF[UndecidedShows] Last episodes loaded ({lastEps.Count}): {sw.ElapsedMilliseconds}ms");
+                var lastEpisodeIds = lastEpisodeByShowId.Select(x => x.LastEpisodeId).ToList();
+                var lastEpsById = _db.Episodes
+                    .AsNoTracking()
+                    .Where(e => lastEpisodeIds.Contains(e.Id))
+                    .ToList()
+                    .ToDictionary(e => e.Id);
+                _logger.LogDebug($"PERF[UndecidedShows] Last episodes loaded ({lastEpsById.Count}): {sw.ElapsedMilliseconds}ms");
 
-                // Attach to EF change tracker so show navigation resolves
-                var lastEpByShowId = new Dictionary<int, Episode>();
-                foreach (var le in lastEps)
-                {
-                    var entry = _db.Entry(le);
-                    var showIdFk = entry.Property<int?>("showId").CurrentValue;
-                    if (showIdFk.HasValue)
-                        lastEpByShowId[showIdFk.Value] = le;
-                }
+                var lastEpByShowId = lastEpisodeByShowId.ToDictionary(x => x.ShowId, x => lastEpsById[x.LastEpisodeId]);
                 foreach (var ep in eps.Where(e => e.show != null))
                 {
                     ep.show.Episodes ??= new List<Episode> { ep };

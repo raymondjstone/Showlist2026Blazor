@@ -140,12 +140,6 @@ public class ShowListAppServiceQueryTests
     [Fact]
     public void UndecidedShows_ExcludesAlreadyDecidedAndFilteredOutShows()
     {
-        // UndecidedShows()'s "attach latest episode" step uses a raw SQL query, which needs a
-        // real relational engine that also translates DateTimeOffset range comparisons -
-        // neither fake provider available for testing offers both (see TestDb remarks), so
-        // that branch only runs when there's at least one eligible result. This test instead
-        // verifies the eligibility computation itself: every show here is excluded for a
-        // different reason, so the raw-SQL branch is never reached and the result must be empty.
         using var db = new TestDb();
         using (var ctx = db.CreateContext())
         {
@@ -168,6 +162,43 @@ public class ShowListAppServiceQueryTests
         var results = service.UndecidedShows();
 
         Assert.Empty(results);
+    }
+
+    [Fact]
+    public void UndecidedShows_ReturnsEligibleShow_WithFirstAndLastEpisodeAttached()
+    {
+        // Regression coverage: UndecidedShows() used to load its "latest episode per show" via
+        // FromSqlRaw, which the InMemory test provider can't execute at all - this whole path
+        // (the actual point of the method) was untestable. Rewritten to two portable LINQ
+        // queries (max-id-per-group, then load those rows), which InMemory runs the same as any
+        // real relational provider.
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = TestData.NewShow("Undecided Show"); // no wanted decision
+            var first = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
+            TestData.NewEpisode(show, 1, 2, DateTimeOffset.UtcNow.AddDays(-1)); // latest aired episode
+
+            var decided = TestData.NewShow("Decided Show", wanted: true); // shouldn't appear
+            TestData.NewEpisode(decided, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+
+            ctx.Shows.AddRange(show, decided);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var results = service.UndecidedShows();
+
+        var result = Assert.Single(results);
+        Assert.Equal("Undecided Show", result.ep.show!.name);
+        Assert.Equal(1, result.ep.number); // S01E01 is the "discovery" episode returned as ep
+
+        // Both the first (S01E01, same as `ep`) and the latest-aired (S01E02) episode should be
+        // attached to show.Episodes for the card's first/last display.
+        Assert.Equal(2, result.ep.show.Episodes!.Count);
+        Assert.Contains(result.ep.show.Episodes, e => e.number == 2);
     }
 
     [Fact]
