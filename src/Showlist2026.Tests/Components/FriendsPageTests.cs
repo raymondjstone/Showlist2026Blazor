@@ -24,6 +24,20 @@ public class FriendsPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void DismissingTheStatusMessage_HidesTheAlert()
+    {
+        var cut = Render<Friends>();
+
+        cut.FindAll("input.form-control")[0].Change("Alice");
+        cut.Find("button.btn-primary").Click();
+        Assert.Contains("Friend added.", cut.Markup);
+
+        cut.Find("button.btn-close").Click();
+
+        Assert.DoesNotContain("Friend added.", cut.Markup);
+    }
+
+    [Fact]
     public void DeletingAFriend_RemovesThemThroughRealService()
     {
         using (var ctx = Db.CreateContext())
