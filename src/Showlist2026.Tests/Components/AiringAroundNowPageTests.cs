@@ -80,6 +80,78 @@ public class AiringAroundNowPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void ClickingEachFilterButton_PersistsThroughRealService()
+    {
+        int typeId, languageId, networkId, webNetworkId, genreTextId;
+        using (var ctx = Db.CreateContext())
+        {
+            var type = TestData.NewType("Scripted");
+            var language = TestData.NewLanguage("English");
+            var network = TestData.NewNetwork("AMC");
+            var webNetwork = TestData.NewWebNetwork("Netflix");
+            var genretext = TestData.NewGenreText("Drama");
+            var show = TestData.NewShow("Wanted Show", wanted: true,
+                type: type, language: language, network: network, webNetwork: webNetwork);
+            show.Genres = new List<Genre> { new() { genretext = genretext, show = show } };
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-10));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            typeId = type.Id;
+            languageId = language.Id;
+            networkId = network.Id;
+            webNetworkId = webNetwork.Id;
+            genreTextId = genretext.Id;
+        }
+
+        var cut = Render<AiringAroundNow>();
+        cut.Find("i[title='Select language']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Languages.Find(languageId)!.Wanted);
+
+        cut = Render<AiringAroundNow>();
+        cut.Find("i[title='Select network']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Networks.Find(networkId)!.Wanted);
+
+        cut = Render<AiringAroundNow>();
+        cut.Find("i[title='Select webnetwork']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.WebNetworks.Find(webNetworkId)!.Wanted);
+
+        cut = Render<AiringAroundNow>();
+        cut.Find("i[title='Select type']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Types.Find(typeId)!.Wanted);
+
+        cut = Render<AiringAroundNow>();
+        cut.Find("i[title='Select genre']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.GenreTexts.Find(genreTextId)!.Wanted);
+    }
+
+    [Fact]
+    public void ClickingCountryFilterButton_PersistsThroughRealService()
+    {
+        int countryId;
+        using (var ctx = Db.CreateContext())
+        {
+            var country = TestData.NewCountry("US");
+            var show = TestData.NewShow("Wanted Show", wanted: true,
+                network: TestData.NewNetwork("AMC", country: country));
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-10));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            countryId = country.Id;
+        }
+
+        var cut = Render<AiringAroundNow>();
+        cut.Find("i[title='Select country']").Click();
+
+        using var verify = Db.CreateContext();
+        Assert.True(verify.Countrys.Find(countryId)!.Wanted);
+    }
+
+    [Fact]
     public void RendersNewTab_ForUndecidedShowsFirstEpisode()
     {
         using (var ctx = Db.CreateContext())
