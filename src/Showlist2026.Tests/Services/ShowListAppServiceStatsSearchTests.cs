@@ -131,6 +131,10 @@ public class ShowListAppServiceStatsSearchTests
         var (undecided, _) = service.AdvancedSearch(null, null, null, null, wanted: "undecided");
         Assert.Single(undecided);
         Assert.Equal("Undecided", undecided[0].name);
+
+        var (excluded, _) = service.AdvancedSearch(null, null, null, null, wanted: "excluded");
+        Assert.Single(excluded);
+        Assert.Equal("Excluded", excluded[0].name);
     }
 
     [Fact]

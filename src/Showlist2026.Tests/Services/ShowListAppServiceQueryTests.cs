@@ -229,6 +229,23 @@ public class ShowListAppServiceQueryTests
     }
 
     [Fact]
+    public void MissedEpisodes_ReturnsEmpty_WhenNoShowsAreWanted()
+    {
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            var notWanted = TestData.NewShow("Not Wanted", wanted: false);
+            TestData.NewEpisode(notWanted, 1, 1, DateTimeOffset.UtcNow.AddDays(-5));
+            ctx.Shows.Add(notWanted);
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+
+        Assert.Empty(service.MissedEpisodes());
+    }
+
+    [Fact]
     public void NextUnwatchedPerShow_ReturnsEarliestUnwatchedAndCorrectCounts()
     {
         using var db = new TestDb();

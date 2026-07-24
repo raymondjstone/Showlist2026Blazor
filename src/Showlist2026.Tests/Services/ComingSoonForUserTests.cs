@@ -97,4 +97,26 @@ public class ComingSoonForUserTests
         Assert.DoesNotContain(results, r => r.ep.name == "Explicitly Wanted");
         Assert.Contains(results, r => r.ep.name == "Still Undecided");
     }
+
+    [Fact]
+    public void ComingSoonForUser_ExcludesShow_ByWebNetworkCountry_WhenShowHasNoMainNetwork()
+    {
+        // Networks.country and WebNetworks.country are each checked in turn - this covers the
+        // WebNetworks.country branch specifically (no Networks assigned at all).
+        using var db = new TestDb();
+        var premieredStr = DateTime.UtcNow.AddDays(30).ToString("yyyy-MM-dd");
+        using (var ctx = db.CreateContext())
+        {
+            var excludedCountry = new Showlist2026.Entities.Country { code = "YY", name = "Excluded Web Land", Wanted = false };
+            var byWebCountry = TestData.NewShow("Excluded By WebCountry", premiered: premieredStr,
+                webNetwork: TestData.NewWebNetwork("Some Web Network", country: excludedCountry));
+            ctx.Shows.Add(byWebCountry);
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        var results = service.ComingSoonForUser();
+
+        Assert.DoesNotContain(results, r => r.ep.name == "Excluded By WebCountry");
+    }
 }

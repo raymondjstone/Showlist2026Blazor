@@ -110,4 +110,74 @@ public class NZBPlanetSearchTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public async Task NZBPlanetSearch_SearchesByTvRage_WhenTvMazeIdIsUnavailable()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(SampleResponseJson);
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        await service.NZBPlanetSearch(new Show { showid = 0, tvrage = "999" });
+
+        httpTest.ShouldHaveCalled("*rid=999*");
+    }
+
+    [Fact]
+    public async Task NZBPlanetSearch_SearchesByTheTvDb_WhenTvMazeIdIsUnavailable()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(SampleResponseJson);
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        await service.NZBPlanetSearch(new Show { showid = 0, thetvdb = "888" });
+
+        httpTest.ShouldHaveCalled("*tvdbid=888*");
+    }
+
+    [Fact]
+    public async Task NZBPlanetSearch_StopsPaginating_WhenAFollowUpPageFails()
+    {
+        var firstPageItems = string.Join(",", Enumerable.Range(0, 100)
+            .Select(i => $$"""{ "title": "Item {{i}}", "category": "TV" }"""));
+        var firstPage = $$"""{ "channel": { "title": "x", "item": [{{firstPageItems}}] } }""";
+
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(firstPage);
+        httpTest.RespondWith("server error", 500);
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        var result = await service.NZBPlanetSearch(new Show { showid = 1 });
+
+        // The follow-up page failed, so pagination stops with just the first page's results.
+        Assert.Equal(100, result!.Channel.Item.Count);
+    }
+
+    [Fact]
+    public async Task NZBPlanetSearch_KeepsPaginating_WhileEachPageIsFull()
+    {
+        var fullPage = $$"""{ "channel": { "title": "x", "item": [{{
+            string.Join(",", Enumerable.Range(0, 100).Select(i => $$"""{ "title": "Item {{i}}", "category": "TV" }"""))
+        }}] } }""";
+        var lastPage = """{ "channel": { "title": "x", "item": [{ "title": "Last Item", "category": "TV" }] } }""";
+
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith(fullPage); // page 1: 100 items -> moretocome
+        httpTest.RespondWith(fullPage); // page 2: also full -> keeps paginating (covers the increment branch)
+        httpTest.RespondWith(lastPage); // page 3: short -> stops
+
+        using var db = new TestDb();
+        var service = TestFactory.CreateAppService(db);
+
+        var result = await service.NZBPlanetSearch(new Show { showid = 1 });
+
+        Assert.Equal(201, result!.Channel.Item.Count);
+        httpTest.ShouldHaveCalled("*offset=200*");
+    }
 }
