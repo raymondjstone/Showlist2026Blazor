@@ -165,6 +165,41 @@ public class ShowListBackgroundServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ShowDownloadedJob_NoMatch_WhenContinuationSeasonIsValid_ButNoEpisodeExistsAtIt()
+    {
+        // effectiveSeason = fileSeason(1) - SeasonOffset(0) = 1, a valid season - but no episode
+        // exists there, so the continuation-candidate loop must complete its body normally
+        // (no continue, no return) rather than matching or throwing.
+        using var db = new TestDb();
+        var tvDir = Path.Combine(_tempRoot, "TvDir");
+        var showFolder = Path.Combine(tvDir, "Old.Show.Name", "Season 1");
+        Directory.CreateDirectory(showFolder);
+        File.WriteAllBytes(Path.Combine(showFolder, "Old.Show.Name.S01E09.mkv"), new byte[1024]);
+
+        int episodeId;
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = tvDir, DaysToScan = -1, MinFileSize = 0, Filter = "*.*" });
+            var successor = TestData.NewShow("New Show Name", wanted: true, folderName: "New.Show.Name");
+            var ep = TestData.NewEpisode(successor, 1, 1, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(successor);
+            ctx.SaveChanges();
+            ctx.ShowFolderAliases.Add(new ShowFolderAlias { ShowId = successor.Id, AliasName = "Old.Show.Name", SeasonOffset = 0 });
+            ctx.SaveChanges();
+            episodeId = ep.Id;
+        }
+
+        using (var ctx = db.CreateContext())
+        {
+            var service = TestFactory.CreateBackgroundService(ctx);
+            Assert.True(await service.ShowDownloadedJob());
+        }
+
+        using var verify = db.CreateContext();
+        Assert.False(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
     public async Task ShowDownloadedJob_SwallowsAndLogs_WhenAFriendCopyFails()
     {
         using var db = new TestDb();
