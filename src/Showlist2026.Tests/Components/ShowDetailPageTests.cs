@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 using System.Linq;
 using Showlist2026.Tests.TestInfrastructure;
 using Showlist2026.Web.Components.Pages;
@@ -30,6 +31,151 @@ public class ShowDetailPageTests : BlazorTestBase
         Assert.Contains("Breaking Bad", cut.Markup);
         Assert.Contains("Season 1", cut.Markup);
         Assert.Contains("Next Episode", cut.Markup);
+    }
+
+    [Fact]
+    public void LoadData_SetsActivelyIgnored_ForEachFilterDimension_WhenExplicitlyExcluded()
+    {
+        // Covers the "else Activelyignored = true" branch of LoadData's per-field ShowFilter
+        // setup for every dimension - the happy-path (Wanted == true) is already covered by
+        // other tests, but Wanted == false on each entity was never exercised.
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var country = new Showlist2026.Entities.Country { code = "US", name = "US", Wanted = false };
+            var show = TestData.NewShow("Excluded Everything", wanted: null,
+                network: TestData.NewNetwork("Bad Network", country: country, wanted: false),
+                webNetwork: TestData.NewWebNetwork("Bad Web Network", wanted: false),
+                type: TestData.NewType("Bad Type", wanted: false),
+                language: TestData.NewLanguage("Bad Language", wanted: false));
+            var badGenre = TestData.NewGenreText("Bad Genre", wanted: false);
+            show.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = badGenre, show = show } };
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+
+        Assert.Contains("Excluded Everything", cut.Markup);
+    }
+
+    [Fact]
+    public void LoadData_SetsCountryIncludeFromWebNetworkCountry_WhenNetworkHasNoCountry()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var webCountry = new Showlist2026.Entities.Country { code = "GB", name = "GB", Wanted = true };
+            var show = TestData.NewShow("Web Country Show", wanted: null,
+                network: TestData.NewNetwork("No Country Network"), // no country at all
+                webNetwork: TestData.NewWebNetwork("Web Network", country: webCountry));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+
+        Assert.Contains("Web Country Show", cut.Markup);
+    }
+
+    [Fact]
+    public void RendersExistingFoldersTable_WhenAMatchingFolderExistsOnDisk()
+    {
+        var tempRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Showlist2026ShowDetailTests_" + Guid.NewGuid());
+        System.IO.Directory.CreateDirectory(tempRoot);
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.Combine(tempRoot, "Breaking Bad"));
+
+            // Re-register the app service with a TvNameListPath pointing at our temp folder so
+            // FindExistingFolders (called during OnParametersSetAsync) has something to find.
+            Services.AddSingleton<Showlist2026.Services.IShowListAppService>(
+                TestFactory.CreateAppService(Db, TestFactory.Options(tvNameListPath: tempRoot), Notifications));
+
+            var showId = SeedShowWithEpisodes();
+
+            var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+
+            Assert.Contains("Existing folders found", cut.Markup);
+            Assert.Contains("Breaking Bad", cut.Markup);
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(tempRoot, recursive: true); } catch { /* best effort cleanup */ }
+        }
+    }
+
+    [Fact]
+    public void NextEpisode_MobileRestoreIcon_MarksWatchedEpisodeAsUnwatched()
+    {
+        int showId, episodeId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad", wanted: true);
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(5), watched: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+            episodeId = ep.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, (long)showId));
+        var restoreIcons = cut.FindAll("i[title='Mark as NOT watched']");
+        // Index 0/1 are the desktop/mobile Next Episode instances (rendered before the episode
+        // table further down the page); there may be more from the table itself.
+        Assert.True(restoreIcons.Count >= 2);
+        restoreIcons[1].Click(); // mobile-specific instance
+
+        using var verify = Db.CreateContext();
+        Assert.False(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
+    public void NextEpisode_MobileUndoGivenUpIcon_ClearsGivenUpFlag()
+    {
+        int showId, episodeId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad", wanted: true);
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(5), givenUp: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+            episodeId = ep.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, (long)showId));
+        var undoIcons = cut.FindAll("i[title='Given up — click to undo']");
+        Assert.True(undoIcons.Count >= 2);
+        undoIcons[1].Click();
+
+        using var verify = Db.CreateContext();
+        Assert.False(verify.Episodes.Find(episodeId)!.GivenUp);
+    }
+
+    [Fact]
+    public void NextEpisode_MobileGiveUpIcon_MarksUpcomingEpisodeGivenUp()
+    {
+        int showId, episodeId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad", wanted: true);
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(5));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+            episodeId = ep.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, (long)showId));
+        var giveUpIcons = cut.FindAll("i[title='Give up this episode']");
+        Assert.True(giveUpIcons.Count >= 2);
+        giveUpIcons[1].Click();
+
+        using var verify = Db.CreateContext();
+        Assert.True(verify.Episodes.Find(episodeId)!.GivenUp);
     }
 
     [Fact]
@@ -477,6 +623,60 @@ public class ShowDetailPageTests : BlazorTestBase
 
         cut.FindAll("button").First(b => b.TextContent.Contains("Clear")).Click();
         Assert.DoesNotContain("Crawl Results", cut.Markup);
+    }
+
+    [Fact]
+    public void CrawlNzbSites_WithNoMatchingLinks_RendersNoMatchingLinksMessage()
+    {
+        using var httpTest = new Flurl.Http.Testing.HttpTest();
+        httpTest.RespondWith("<html><body><p>Nothing to see here</p></body></html>");
+
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad", wanted: true);
+            TestData.NewEpisode(show, 1, 3, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.TVSites.Add(new Showlist2026.Entities.TVSite
+            {
+                Name = "MySite", URLTemplate = "http://example.com/search?q={URLSearchTerm}", Active = true, Order = 1
+            });
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-outline-primary.btn-sm.ms-3").Click(); // Crawl API
+
+        Assert.Contains("No matching NZB links found for unwatched episodes.", cut.Markup);
+    }
+
+    [Fact]
+    public void CrawlNzbSites_WithHttpFailure_RendersDangerBadgeInUrlsCrawledTable()
+    {
+        using var httpTest = new Flurl.Http.Testing.HttpTest();
+        httpTest.RespondWith("not found", 404);
+
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad", wanted: true);
+            TestData.NewEpisode(show, 1, 3, DateTimeOffset.UtcNow.AddDays(-1));
+            ctx.Shows.Add(show);
+            ctx.TVSites.Add(new Showlist2026.Entities.TVSite
+            {
+                Name = "MySite", URLTemplate = "http://example.com/search?q={URLSearchTerm}", Active = true, Order = 1
+            });
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("button.btn-outline-primary.btn-sm.ms-3").Click(); // Crawl API
+
+        Assert.Contains("URLs Crawled", cut.Markup);
+        Assert.Contains("bg-danger", cut.Markup);
+        Assert.Contains("404", cut.Markup);
     }
 
     [Fact]
