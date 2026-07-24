@@ -186,6 +186,31 @@ public class ShowListAppServiceFileSystemTests : IDisposable
     }
 
     [Fact]
+    public void FindExistingFolders_DedupesSameFolder_ReachableViaTwoDifferentRootStrings()
+    {
+        // TvNameListPath and a configured TVDirectory can be different STRINGS that resolve to
+        // the same physical root (e.g. one with a trailing separator, one without) - rootPaths
+        // itself won't dedupe that, so the per-folder `seen` set must catch it.
+        using var db = new TestDb();
+        Directory.CreateDirectory(Path.Combine(_tempRoot, "My Show"));
+        var rootWithTrailingSeparator = _tempRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var rootWithoutTrailingSeparator = _tempRoot.TrimEnd(Path.DirectorySeparatorChar);
+
+        using (var ctx = db.CreateContext())
+        {
+            ctx.TVDirectories.Add(new TVDirectories { Name = rootWithoutTrailingSeparator, DaysToScan = 7 });
+            ctx.SaveChanges();
+        }
+
+        var service = TestFactory.CreateAppService(db, TestFactory.Options(tvNameListPath: rootWithTrailingSeparator));
+        var show = new Show { name = "My Show" };
+
+        var results = service.FindExistingFolders(show, new List<ShowFolderAlias>());
+
+        Assert.Single(results);
+    }
+
+    [Fact]
     public void FindExistingFolders_ComputesEarliestAndLatestEpisodeFromFolderContents()
     {
         using var db = new TestDb();
