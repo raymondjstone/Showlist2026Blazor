@@ -81,6 +81,31 @@ public class ShowDetailPageTests : BlazorTestBase
     }
 
     [Fact]
+    public void ClickingASeasonTab_SwitchesTheActiveSeasonTab()
+    {
+        int showId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Multi Season Show", wanted: true);
+            TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
+            TestData.NewEpisode(show, 2, 1, DateTimeOffset.UtcNow.AddDays(-10));
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        var tabs = cut.FindAll("#seasonTabs button.nav-link");
+        Assert.True(tabs.Count >= 2);
+
+        var inactiveTab = tabs.First(t => !t.ClassList.Contains("active"));
+        inactiveTab.Click();
+
+        var activeTab = cut.Find("#seasonTabs button.nav-link.active");
+        Assert.Equal(inactiveTab.TextContent.Trim(), activeTab.TextContent.Trim());
+    }
+
+    [Fact]
     public void RendersExistingFoldersTable_WhenAMatchingFolderExistsOnDisk()
     {
         var tempRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Showlist2026ShowDetailTests_" + Guid.NewGuid());
@@ -127,6 +152,29 @@ public class ShowDetailPageTests : BlazorTestBase
         // table further down the page); there may be more from the table itself.
         Assert.True(restoreIcons.Count >= 2);
         restoreIcons[1].Click(); // mobile-specific instance
+
+        using var verify = Db.CreateContext();
+        Assert.False(verify.Episodes.Find(episodeId)!.Watched);
+    }
+
+    [Fact]
+    public void NextEpisode_DesktopRestoreIcon_MarksWatchedEpisodeAsUnwatched()
+    {
+        int showId, episodeId;
+        using (var ctx = Db.CreateContext())
+        {
+            var show = TestData.NewShow("Breaking Bad", wanted: true);
+            var ep = TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(5), watched: true);
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+            showId = show.Id;
+            episodeId = ep.Id;
+        }
+
+        var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, (long)showId));
+        var restoreIcons = cut.FindAll("i[title='Mark as NOT watched']");
+        Assert.True(restoreIcons.Count >= 2);
+        restoreIcons[0].Click(); // desktop-specific instance
 
         using var verify = Db.CreateContext();
         Assert.False(verify.Episodes.Find(episodeId)!.Watched);
@@ -370,7 +418,7 @@ public class ShowDetailPageTests : BlazorTestBase
     [Fact]
     public void ClickingTypeLanguageNetworkWebNetworkAndCountryFilters_PersistThroughRealService()
     {
-        int typeId, languageId, networkId, webNetworkId, networkCountryId;
+        int typeId, languageId, networkId, webNetworkId, networkCountryId, genreTextId;
         int showId;
         using (var ctx = Db.CreateContext())
         {
@@ -379,8 +427,12 @@ public class ShowDetailPageTests : BlazorTestBase
             var country = TestData.NewCountry("US");
             var network = TestData.NewNetwork("AMC", country: country);
             var webNetwork = TestData.NewWebNetwork("Netflix");
-            var show = TestData.NewShow("Full Show", wanted: true,
+            var genretext = TestData.NewGenreText("Drama");
+            // Show itself left undecided (wanted: null) so the "Select show" icon still renders -
+            // the per-entity Wanted flags below are independent of the show's own decision.
+            var show = TestData.NewShow("Full Show", wanted: null,
                 type: type, language: language, network: network, webNetwork: webNetwork);
+            show.Genres = new List<Showlist2026.Entities.Genre> { new() { genretext = genretext, show = show } };
             TestData.NewEpisode(show, 1, 1, DateTimeOffset.UtcNow.AddDays(-30));
             ctx.Shows.Add(show);
             ctx.SaveChanges();
@@ -390,6 +442,7 @@ public class ShowDetailPageTests : BlazorTestBase
             networkId = network.Id;
             webNetworkId = webNetwork.Id;
             networkCountryId = country.Id;
+            genreTextId = genretext.Id;
         }
 
         var cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
@@ -416,6 +469,16 @@ public class ShowDetailPageTests : BlazorTestBase
         cut.Find("i[title='Select webnetwork']").Click();
         using (var verify = Db.CreateContext())
             Assert.True(verify.WebNetworks.Find(webNetworkId)!.Wanted);
+
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("i[title='Select show']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.Shows.Find(showId)!.Wanted);
+
+        cut = Render<ShowDetail>(p => p.Add(c => c.ShowId, showId));
+        cut.Find("i[title='Select genre']").Click();
+        using (var verify = Db.CreateContext())
+            Assert.True(verify.GenreTexts.Find(genreTextId)!.Wanted);
     }
 
     [Fact]
