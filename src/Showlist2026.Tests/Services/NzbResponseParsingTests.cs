@@ -329,10 +329,16 @@ public class NzbResponseParsingTests
     [Fact]
     public void ParseNzbSiteHtml_RowStrategy_TakesTitleFromAnchorTextContainingEpisodeCode()
     {
+        // The episode-code-bearing <a> has no href (so the document-wide anchor strategy, which
+        // requires href on the matching tag, can't claim it first) - only the row strategy's
+        // anchor-text lookup (which doesn't require href) can find it. A header row with no
+        // episode code at all is included first so that its inner pattern-search loop also
+        // completes without ever matching.
         var html = """
         <html><body>
           <table>
-            <tr><td><a href="http://example.com/download/1">Show.Name.S01E01.720p.WEB-DL</a></td></tr>
+            <tr><th>Name</th><th>Link</th></tr>
+            <tr><td><a>Show.Name.S01E01.720p.WEB-DL</a></td><td><a href="http://example.com/download/1">Download</a></td></tr>
           </table>
         </body></html>
         """;
@@ -344,6 +350,7 @@ public class NzbResponseParsingTests
 
         var result = Assert.Single(results);
         Assert.Equal("Show.Name.S01E01.720p.WEB-DL", result.Title);
+        Assert.Equal("http://example.com/download/1", result.DownloadUrl);
     }
 
     [Fact]

@@ -128,6 +128,27 @@ public class ShowListAppServiceImportExportTests
     }
 
     [Fact]
+    public void PreviewImportWatchedFromPaths_FallsBackToDefaultFolderName_WhenFolderNameNotSet()
+    {
+        using var db = new TestDb();
+        using (var ctx = db.CreateContext())
+        {
+            // No FolderName set - ParseImportPaths must fall back to DefaultFolderName ("My Show").
+            var show = TestData.NewShow("My Show", premiered: "2010-01-01");
+            ctx.Shows.Add(show);
+            ctx.SaveChanges();
+        }
+
+        var fileContent = @"D:\TV\My Show\Season 1\My.Show.S01E01.mkv";
+
+        var service = TestFactory.CreateAppService(db);
+        var preview = service.PreviewImportWatchedFromPaths(fileContent);
+
+        var match = Assert.Single(preview.MatchedShows);
+        Assert.Equal("My Show", match.ShowName);
+    }
+
+    [Fact]
     public async Task CommitImportWatchedFromPaths_MarksShowWantedAndEpisodesUpToMaxWatched()
     {
         using var db = new TestDb();

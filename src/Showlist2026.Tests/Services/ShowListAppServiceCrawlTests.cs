@@ -482,6 +482,38 @@ public class ShowListAppServiceCrawlTests
     }
 
     [Fact]
+    public async Task CrawlNzbRssFeedsForShow_DerivesNzbGeekRssBaseUrl_ForNzbGeekUrlTemplate()
+    {
+        using var httpTest = new HttpTest();
+        httpTest.RespondWith("<rss><channel></channel></rss>");
+
+        using var db = new TestDb();
+        int showId;
+        using (var ctx = db.CreateContext())
+        {
+            var show = MakeShowWithUnwatchedEpisode();
+            ctx.Shows.Add(show);
+            ctx.TVSites.Add(new TVSite
+            {
+                Name = "NzbGeek",
+                URLTemplate = "https://nzbgeek.info/geekseek.php?q={URLSearchTerm}",
+                RssApiKey = "rsskey",
+                RssBaseUrl = null,
+                ApiBaseUrl = null,
+                Active = true,
+                Order = 1
+            });
+            ctx.SaveChanges();
+            showId = show.Id;
+        }
+
+        var service = TestFactory.CreateAppService(db);
+        await service.CrawlNzbRssFeedsForShow(showId);
+
+        httpTest.ShouldHaveCalled("https://api.nzbgeek.info/api*");
+    }
+
+    [Fact]
     public async Task CrawlNzbRssFeedsForShow_DerivesRssBaseUrl_FromApiBaseUrl_WhenRssBaseUrlNotSet()
     {
         using var httpTest = new HttpTest();
